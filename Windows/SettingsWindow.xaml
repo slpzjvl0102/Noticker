@@ -1,0 +1,85 @@
+<Window x:Class="Noticker.Windows.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Noticker 설정"
+        Width="420" Height="460"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <Style TargetType="Label">
+            <Setter Property="Margin" Value="0,8,0,2"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="4,3"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16">
+            <TextBlock FontSize="18" FontWeight="Bold" Margin="0,0,0,12">Noticker 설정</TextBlock>
+
+            <!-- Notion Token -->
+            <Label>Notion API Token</Label>
+            <PasswordBox x:Name="TokenBox" Padding="4,3" Margin="0,0,0,4"/>
+
+            <!-- Target DB -->
+            <Label>Target DB ID (또는 URL)</Label>
+            <TextBox x:Name="DbIdBox"/>
+
+            <!-- Category property name -->
+            <Label>Category Property 이름</Label>
+            <TextBox x:Name="CategoryPropertyBox" Text="Category"/>
+
+            <!-- Test connection -->
+            <Button x:Name="TestButton" Content="연결 테스트"
+                    HorizontalAlignment="Left" Padding="12,4" Margin="0,4,0,4"
+                    Click="TestButton_Click"/>
+            <TextBlock x:Name="TestResultText" FontSize="12" Margin="0,0,0,8"
+                       TextWrapping="Wrap"/>
+
+            <Separator Margin="0,4,0,4"/>
+
+            <!-- Category refresh -->
+            <Label>카테고리 옵션</Label>
+            <Button x:Name="RefreshCatButton" Content="옵션 새로고침"
+                    HorizontalAlignment="Left" Padding="12,4" Margin="0,0,0,4"
+                    Click="RefreshCatButton_Click"/>
+            <TextBlock x:Name="CatStatusText" FontSize="12" Margin="0,0,0,8"/>
+
+            <Separator Margin="0,4,0,4"/>
+
+            <!-- Color swap -->
+            <CheckBox x:Name="ColorSwapCheck" Content="색상 Swap (흑↔백)" Margin="0,4"/>
+
+            <!-- Preview swatches -->
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                <Border Width="80" Height="40" BorderThickness="1" BorderBrush="#ccc"
+                        Background="Black">
+                    <TextBlock Foreground="White" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" FontSize="10">기본</TextBlock>
+                </Border>
+                <TextBlock VerticalAlignment="Center" Margin="8,0" FontSize="14">⇔</TextBlock>
+                <Border Width="80" Height="40" BorderThickness="1" BorderBrush="#ccc"
+                        Background="White">
+                    <TextBlock Foreground="Black" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" FontSize="10">Swap</TextBlock>
+                </Border>
+            </StackPanel>
+
+            <!-- Autostart -->
+            <CheckBox x:Name="AutostartCheck" Content="Windows 시작 시 자동 실행" Margin="0,4"/>
+
+            <Separator Margin="0,8,0,8"/>
+
+            <!-- Save button -->
+            <Button x:Name="SaveButton" Content="저장"
+                    HorizontalAlignment="Right" Padding="20,6"
+                    IsDefault="True"
+                    Click="SaveButton_Click"/>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

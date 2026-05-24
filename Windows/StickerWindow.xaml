@@ -1,0 +1,139 @@
+<Window x:Class="Noticker.Windows.StickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        AllowsTransparency="False"
+        MinWidth="150" MinHeight="120"
+        SizeToContent="Manual">
+
+    <Window.Resources>
+        <!-- 8x8 resize grip in bottom-right corner -->
+        <ControlTemplate x:Key="ResizeHandleTemplate" TargetType="Thumb">
+            <Canvas Width="16" Height="16">
+                <Line X1="4" Y1="16" X2="16" Y2="4" Stroke="#888" StrokeThickness="1.5"/>
+                <Line X1="8" Y1="16" X2="16" Y2="8" Stroke="#888" StrokeThickness="1.5"/>
+                <Line X1="12" Y1="16" X2="16" Y2="12" Stroke="#888" StrokeThickness="1.5"/>
+            </Canvas>
+        </ControlTemplate>
+
+        <Style x:Key="TitleBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="CaretBrush" Value="{Binding TitleForeground}"/>
+            <Setter Property="Foreground" Value="{Binding TitleForeground}"/>
+        </Style>
+        <Style x:Key="BodyBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="AcceptsTab" Value="False"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="CaretBrush" Value="{Binding BodyForeground}"/>
+            <Setter Property="Foreground" Value="{Binding BodyForeground}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{Binding BodyBackground}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="28"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="24"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top bar: drag handle, sync dot, title, X button -->
+        <Grid Grid.Row="0" Background="{Binding TitleBackground}"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="24"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sync indicator -->
+            <Ellipse x:Name="SyncDot" Grid.Column="0"
+                     Width="6" Height="6"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Fill="{Binding SyncDotColor}">
+                <Ellipse.ToolTip>
+                    <ToolTip Content="{Binding SyncTooltip}"/>
+                </Ellipse.ToolTip>
+            </Ellipse>
+
+            <!-- Title input -->
+            <TextBox x:Name="TitleBox" Grid.Column="1"
+                     Style="{StaticResource TitleBoxStyle}"
+                     Text="{Binding StickerTitle, UpdateSourceTrigger=PropertyChanged}"
+                     TabIndex="0"
+                     MouseLeftButtonDown="TitleBox_MouseLeftButtonDown"
+                     TextChanged="TitleBox_TextChanged"/>
+
+            <!-- Delete button -->
+            <Button Grid.Column="2" Content="×"
+                    Background="Transparent" BorderThickness="0"
+                    Foreground="{Binding TitleForeground}"
+                    FontSize="16" FontWeight="Bold"
+                    VerticalAlignment="Center" HorizontalAlignment="Center"
+                    Cursor="Hand" TabIndex="3"
+                    Click="DeleteButton_Click"/>
+        </Grid>
+
+        <!-- Body text area -->
+        <TextBox x:Name="BodyBox" Grid.Row="1"
+                 Style="{StaticResource BodyBoxStyle}"
+                 Text="{Binding Body, UpdateSourceTrigger=PropertyChanged}"
+                 Background="{Binding BodyBackground}"
+                 TabIndex="1"
+                 TextChanged="BodyBox_TextChanged"/>
+
+        <!-- Bottom bar: category dropdown + char counter -->
+        <Grid Grid.Row="2" Background="{Binding TitleBackground}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="20"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Category dropdown -->
+            <ComboBox x:Name="CategoryBox" Grid.Column="0"
+                      SelectedValue="{Binding Category}"
+                      ItemsSource="{Binding CategoryOptions}"
+                      Background="Transparent" BorderThickness="0"
+                      FontSize="11" VerticalAlignment="Center"
+                      Padding="4,0" TabIndex="2"
+                      SelectionChanged="CategoryBox_SelectionChanged"
+                      IsEnabled="{Binding HasCategoryOptions}">
+                <ComboBox.Style>
+                    <Style TargetType="ComboBox">
+                        <Style.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="ToolTip" Value="설정에서 카테고리 옵션을 새로고침하세요"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </ComboBox.Style>
+            </ComboBox>
+
+            <!-- Char counter (visible only when >= 1800 chars) -->
+            <TextBlock x:Name="CharCounter" Grid.Column="1"
+                       Text="{Binding CharCounterText}"
+                       Visibility="{Binding CharCounterVisibility}"
+                       Foreground="#EF4444" FontSize="10"
+                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+
+            <!-- Resize handle (bottom-right) -->
+            <Thumb Grid.Column="2" Width="16" Height="20"
+                   Cursor="SizeNWSE" VerticalAlignment="Bottom"
+                   DragDelta="ResizeThumb_DragDelta"
+                   Background="Transparent"
+                   Template="{StaticResource ResizeHandleTemplate}"/>
+        </Grid>
+    </Grid>
+</Window>
