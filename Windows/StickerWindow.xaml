@@ -65,13 +65,15 @@
         </Style>
     </Window.Resources>
 
-    <!-- Outer border provides shadow clearance; DropShadowEffect renders into the 8px margin -->
-    <Border Margin="8,8,8,8">
+    <!-- Outer border provides shadow clearance; DropShadowEffect renders into the 10px margin -->
+    <Border Margin="10">
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="14" Opacity="0.22"
-                              ShadowDepth="3" Direction="270"/>
+            <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.45"
+                              ShadowDepth="4" Direction="270"/>
         </Border.Effect>
 
+        <!-- Inner content border — 1px frame visible on any background -->
+        <Border BorderThickness="1" BorderBrush="#30808080">
         <Grid Background="{Binding BodyBackground}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="28"/>
@@ -208,5 +210,6 @@
                        Template="{StaticResource ResizeHandleTemplate}"/>
             </Grid>
         </Grid>
+        </Border>
     </Border>
 </Window>
