@@ -131,7 +131,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Char counter ───────────────────────────────────────────────────────────
 
-    public string CharCounterText => $"{_sticker.Body.Length:N0}자 (한 줄 2,000자 제한)";
+    public string CharCounterText => $"{_sticker.Body.Length:N0}자";
     public Visibility CharCounterVisibility =>
         _sticker.Body.Length >= 1800 ? Visibility.Visible : Visibility.Collapsed;
 

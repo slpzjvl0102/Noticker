@@ -288,7 +288,8 @@
                           FontSize="12" VerticalAlignment="Center"
                           Padding="4,0" TabIndex="2"
                           SelectionChanged="CategoryBox_SelectionChanged"
-                          IsEnabled="{Binding HasCategoryOptions}">
+                          IsEnabled="{Binding HasCategoryOptions}"
+                          ToolTipService.ShowOnDisabled="True">
                     <ComboBox.Style>
                         <Style TargetType="ComboBox" BasedOn="{StaticResource StickerComboBoxStyle}">
                             <Style.Triggers>
