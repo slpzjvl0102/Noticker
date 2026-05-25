@@ -54,7 +54,8 @@ public partial class SettingsWindow : Window
         var error = await _client.TestConnectionAsync(default);
         if (error is null)
         {
-            TestResultText.Foreground = Brushes.Green;
+            TestResultText.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0x15, 0x80, 0x3D)); // green-700, 6.1:1 on #FAFAFA
             TestResultText.Text = "연결 성공!";
         }
         else
