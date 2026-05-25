@@ -172,14 +172,14 @@
     </Window.Resources>
 
     <!-- Outer border provides shadow clearance; DropShadowEffect renders into the 10px margin -->
-    <Border Margin="10" CornerRadius="8">
-        <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.45"
-                              ShadowDepth="4" Direction="270"/>
-        </Border.Effect>
+    <Border Margin="10">
 
-        <!-- Inner content border — 1px frame visible on any background -->
+        <!-- Inner content border — CornerRadius and shadow on same element so the shadow follows the rounded shape -->
         <Border BorderThickness="1" BorderBrush="#30808080" CornerRadius="8">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.45"
+                                  ShadowDepth="4" Direction="270"/>
+            </Border.Effect>
         <Grid Background="{Binding BodyBackground}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="28"/>
@@ -304,7 +304,7 @@
                 <TextBlock x:Name="CharCounter" Grid.Column="1"
                            Text="{Binding CharCounterText}"
                            Visibility="{Binding CharCounterVisibility}"
-                           Foreground="#EF4444" FontSize="10"
+                           Foreground="#EF4444" FontSize="11"
                            VerticalAlignment="Center" Margin="0,0,4,0"/>
 
                 <!-- Resize handle (bottom-right) -->
