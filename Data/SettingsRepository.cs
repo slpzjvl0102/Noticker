@@ -83,6 +83,17 @@ public class SettingsRepository
             }
             catch { /* malformed cache — ignore */ }
         }
+
+        var colorsCache = Get("category_colors_cache");
+        if (colorsCache is not null)
+        {
+            try
+            {
+                settings.CategoryColors = System.Text.Json.JsonSerializer
+                    .Deserialize<Dictionary<string, string>>(colorsCache) ?? [];
+            }
+            catch { /* malformed cache — ignore */ }
+        }
     }
 
     public void SaveToken(string plainToken)
@@ -94,6 +105,12 @@ public class SettingsRepository
     {
         Set("category_options_cache",
             System.Text.Json.JsonSerializer.Serialize(options));
+    }
+
+    public void SaveCategoryColors(Dictionary<string, string> colors)
+    {
+        Set("category_colors_cache",
+            System.Text.Json.JsonSerializer.Serialize(colors));
     }
 
     private SqliteConnection Open()

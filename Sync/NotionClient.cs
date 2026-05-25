@@ -81,7 +81,9 @@ public class NotionClient
     }
 
     // Fetches options for the configured Category property (select or multi_select).
-    public async Task<List<string>> FetchCategoryOptionsAsync(CancellationToken ct)
+    // Returns (Name, NotionColor) pairs — color is one of: default, gray, brown, orange, yellow,
+    // green, blue, purple, pink, red.
+    public async Task<List<(string Name, string Color)>> FetchCategoryOptionsAsync(CancellationToken ct)
     {
         SetAuth();
         var response = await GetAsync($"/databases/{_settings.TargetDbId}", ct);
@@ -96,7 +98,7 @@ public class NotionClient
                 $"DB에 있는 프로퍼티: {available}");
         }
 
-        var options = new List<string>();
+        var options = new List<(string Name, string Color)>();
         foreach (var typeName in new[] { "select", "multi_select" })
         {
             if (prop.TryGetProperty(typeName, out var sel) &&
@@ -105,7 +107,11 @@ public class NotionClient
                 foreach (var opt in opts.EnumerateArray())
                 {
                     if (opt.TryGetProperty("name", out var name))
-                        options.Add(name.GetString() ?? "");
+                    {
+                        var color = opt.TryGetProperty("color", out var c)
+                            ? (c.GetString() ?? "default") : "default";
+                        options.Add((name.GetString() ?? "", color));
+                    }
                 }
                 break;
             }

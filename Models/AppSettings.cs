@@ -32,6 +32,7 @@ public class AppSettings : INotifyPropertyChanged
     public string CategoryPropertyName { get; set; } = "Category";
     public bool AutostartEnabled { get; set; }
     public List<string> CategoryOptions { get; set; } = [];
+    public Dictionary<string, string> CategoryColors { get; set; } = [];
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(NotionToken) &&

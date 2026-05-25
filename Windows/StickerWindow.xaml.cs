@@ -76,14 +76,40 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     public bool HasCategoryOptions => AppSettings.Instance.CategoryOptions.Count > 0;
 
-    // ── Colors (driven by AppSettings.ColorSwapped) ────────────────────────────
+    // ── Colors (driven by AppSettings.ColorSwapped + category) ───────────────
 
     private bool Swapped => AppSettings.Instance.ColorSwapped;
 
     private static readonly SolidColorBrush _darkGray = new(Color.FromRgb(0x33, 0x33, 0x33));
 
-    public Brush TitleBackground => Swapped ? Brushes.White : _darkGray;
-    public Brush TitleForeground => Swapped ? Brushes.Black : Brushes.White;
+    private static readonly Dictionary<string, Color> _notionColors = new()
+    {
+        ["default"] = Color.FromRgb(0x33, 0x33, 0x33),
+        ["gray"]    = Color.FromRgb(0x4A, 0x4A, 0x4A),
+        ["brown"]   = Color.FromRgb(0x60, 0x36, 0x1A),
+        ["orange"]  = Color.FromRgb(0x99, 0x4A, 0x00),
+        ["yellow"]  = Color.FromRgb(0x7B, 0x56, 0x0E),
+        ["green"]   = Color.FromRgb(0x1A, 0x5C, 0x3A),
+        ["blue"]    = Color.FromRgb(0x1A, 0x44, 0x80),
+        ["purple"]  = Color.FromRgb(0x4D, 0x21, 0x7A),
+        ["pink"]    = Color.FromRgb(0x80, 0x1D, 0x5A),
+        ["red"]     = Color.FromRgb(0x80, 0x1C, 0x1C),
+    };
+
+    private SolidColorBrush? CategoryBarBrush()
+    {
+        var cat = _sticker.Category;
+        if (cat is null) return null;
+        var colors = AppSettings.Instance.CategoryColors;
+        if (colors.TryGetValue(cat, out var notionColor) &&
+            _notionColors.TryGetValue(notionColor, out var wpfColor))
+            return new SolidColorBrush(wpfColor);
+        return null;
+    }
+
+    public Brush TitleBackground => CategoryBarBrush() ?? (Swapped ? Brushes.White : _darkGray);
+    public Brush TitleForeground => CategoryBarBrush() is not null ? Brushes.White
+                                    : (Swapped ? Brushes.Black : Brushes.White);
     public Brush BodyBackground => Swapped ? _darkGray : Brushes.White;
     public Brush BodyForeground => Swapped ? Brushes.White : Brushes.Black;
 
@@ -146,6 +172,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         if (_loading) return;
         _sticker.Category = CategoryBox.SelectedValue as string;
         SaveContent();
+        UpdateBarColors();
         _debounce.OnChanged(_sticker);
     }
 
@@ -225,6 +252,12 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         Notify(nameof(SyncTooltip));
     }
 
+    private void UpdateBarColors()
+    {
+        Notify(nameof(TitleBackground));
+        Notify(nameof(TitleForeground));
+    }
+
     private void UpdateCharCounter()
     {
         Notify(nameof(CharCounterText));
@@ -246,5 +279,6 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         Notify(nameof(CategoryOptions));
         Notify(nameof(HasCategoryOptions));
+        UpdateBarColors();
     }
 }
