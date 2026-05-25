@@ -103,10 +103,10 @@ public partial class App : System.Windows.Application
 
     private static System.Drawing.Icon LoadTrayIcon()
     {
-        var icoPath = System.IO.Path.Combine(
-            AppContext.BaseDirectory, "Assets", "noticker.ico");
-        return System.IO.File.Exists(icoPath)
-            ? new System.Drawing.Icon(icoPath)
+        var uri = new Uri("pack://application:,,,/Assets/noticker.ico");
+        var stream = System.Windows.Application.GetResourceStream(uri)?.Stream;
+        return stream is not null
+            ? new System.Drawing.Icon(stream)
             : SystemIcons.Application;
     }
 

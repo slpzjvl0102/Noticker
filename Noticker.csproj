@@ -13,9 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="Assets\noticker.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Resource Include="Assets\noticker.ico"/>
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
