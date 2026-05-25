@@ -9,7 +9,14 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Noticker</AssemblyName>
     <RootNamespace>Noticker</RootNamespace>
+    <ApplicationIcon>Assets\noticker.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\noticker.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <PublishSingleFile>true</PublishSingleFile>

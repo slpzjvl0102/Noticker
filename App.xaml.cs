@@ -101,11 +101,20 @@ public partial class App : System.Windows.Application
         }
     }
 
+    private static System.Drawing.Icon LoadTrayIcon()
+    {
+        var icoPath = System.IO.Path.Combine(
+            AppContext.BaseDirectory, "Assets", "noticker.ico");
+        return System.IO.File.Exists(icoPath)
+            ? new System.Drawing.Icon(icoPath)
+            : SystemIcons.Application;
+    }
+
     private void InitTray()
     {
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = LoadTrayIcon(),
             Visible = true,
             Text = "Noticker"
         };
