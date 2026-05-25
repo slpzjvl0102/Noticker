@@ -172,14 +172,14 @@
     </Window.Resources>
 
     <!-- Outer border provides shadow clearance; DropShadowEffect renders into the 10px margin -->
-    <Border Margin="10">
+    <Border Margin="10" CornerRadius="8">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.45"
                               ShadowDepth="4" Direction="270"/>
         </Border.Effect>
 
         <!-- Inner content border — 1px frame visible on any background -->
-        <Border BorderThickness="1" BorderBrush="#30808080">
+        <Border BorderThickness="1" BorderBrush="#30808080" CornerRadius="8">
         <Grid Background="{Binding BodyBackground}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="28"/>
