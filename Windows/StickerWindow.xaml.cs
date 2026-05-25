@@ -80,9 +80,11 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     private bool Swapped => AppSettings.Instance.ColorSwapped;
 
-    public Brush TitleBackground => Swapped ? Brushes.White : Brushes.Black;
+    private static readonly SolidColorBrush _darkGray = new(Color.FromRgb(0x33, 0x33, 0x33));
+
+    public Brush TitleBackground => Swapped ? Brushes.White : _darkGray;
     public Brush TitleForeground => Swapped ? Brushes.Black : Brushes.White;
-    public Brush BodyBackground => Swapped ? Brushes.Black : Brushes.White;
+    public Brush BodyBackground => Swapped ? _darkGray : Brushes.White;
     public Brush BodyForeground => Swapped ? Brushes.White : Brushes.Black;
 
     // ── Sync indicator ─────────────────────────────────────────────────────────
