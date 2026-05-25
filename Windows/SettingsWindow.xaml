@@ -87,7 +87,7 @@
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="Foreground" Value="#AAAAAA"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="0,20,0,10"/>
+            <Setter Property="Margin" Value="0,16,0,8"/>
         </Style>
 
         <!-- Line-style TextBox -->
