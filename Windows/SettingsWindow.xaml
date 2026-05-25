@@ -41,7 +41,7 @@
             <TextBlock x:Name="TestResultText" FontSize="12" Margin="0,0,0,8"
                        TextWrapping="Wrap"/>
 
-            <Separator Margin="0,4,0,4"/>
+            <Separator Margin="0,6,0,6"/>
 
             <!-- Category refresh -->
             <Label>카테고리 옵션</Label>
@@ -50,7 +50,7 @@
                     Click="RefreshCatButton_Click"/>
             <TextBlock x:Name="CatStatusText" FontSize="12" Margin="0,0,0,8"/>
 
-            <Separator Margin="0,4,0,4"/>
+            <Separator Margin="0,6,0,6"/>
 
             <!-- Color swap -->
             <CheckBox x:Name="ColorSwapCheck" Content="색상 Swap (흑↔백)" Margin="0,4"/>
@@ -73,7 +73,7 @@
             <!-- Autostart -->
             <CheckBox x:Name="AutostartCheck" Content="Windows 시작 시 자동 실행" Margin="0,4"/>
 
-            <Separator Margin="0,8,0,8"/>
+            <Separator Margin="0,6,0,6"/>
 
             <!-- Save button -->
             <Button x:Name="SaveButton" Content="저장"
