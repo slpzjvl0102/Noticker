@@ -106,7 +106,8 @@
                       SelectedValue="{Binding Category}"
                       ItemsSource="{Binding CategoryOptions}"
                       Background="Transparent" BorderThickness="0"
-                      FontSize="11" VerticalAlignment="Center"
+                      Foreground="{Binding TitleForeground}"
+                      FontSize="12" VerticalAlignment="Center"
                       Padding="4,0" TabIndex="2"
                       SelectionChanged="CategoryBox_SelectionChanged"
                       IsEnabled="{Binding HasCategoryOptions}">
