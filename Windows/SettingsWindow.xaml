@@ -2,84 +2,195 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Noticker 설정"
-        Width="420" Height="460"
+        Width="420" Height="520"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Background="#FAFAFA">
 
     <Window.Resources>
-        <Style TargetType="Label">
-            <Setter Property="Margin" Value="0,8,0,2"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+        <!-- Minimal action button (outlined) -->
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#F0F0F0"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#999999"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E4E4E4"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="4,3"/>
+
+        <!-- Primary (Save) button — black fill -->
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="24,8"/>
+            <Setter Property="Background" Value="#1A1A1A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#333333"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#000000"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Field label -->
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#888888"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+
+        <!-- Section heading -->
+        <Style x:Key="SectionHeadingStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="#AAAAAA"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,20,0,10"/>
+        </Style>
+
+        <!-- Line-style TextBox -->
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="0,6"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="#DDDDDD"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+        </Style>
+
+        <!-- Line-style PasswordBox -->
+        <Style TargetType="PasswordBox">
+            <Setter Property="Padding" Value="0,6"/>
+            <Setter Property="Margin" Value="0,0,0,16"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="#DDDDDD"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#1A1A1A"/>
+        </Style>
+
+        <!-- Minimal CheckBox -->
+        <Style TargetType="CheckBox">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
     </Window.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="16">
-            <TextBlock FontSize="18" FontWeight="Bold" Margin="0,0,0,12">Noticker 설정</TextBlock>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-            <!-- Notion Token -->
-            <Label>Notion API Token</Label>
-            <PasswordBox x:Name="TokenBox" Padding="4,3" Margin="0,0,0,4"/>
+        <!-- Black header — mirrors the sticker title bar -->
+        <Grid Grid.Row="0" Background="#1A1A1A">
+            <TextBlock Text="Noticker 설정"
+                       Foreground="White"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Margin="20,0"/>
+        </Grid>
 
-            <!-- Target DB -->
-            <Label>Target DB ID (또는 URL)</Label>
-            <TextBox x:Name="DbIdBox"/>
+        <!-- Content area -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20,16,20,20">
 
-            <!-- Category property name -->
-            <Label>Category Property 이름</Label>
-            <TextBox x:Name="CategoryPropertyBox" Text="Category"/>
+                <!-- Notion Token -->
+                <TextBlock Text="NOTION API TOKEN" Style="{StaticResource FieldLabelStyle}"/>
+                <PasswordBox x:Name="TokenBox"/>
 
-            <!-- Test connection -->
-            <Button x:Name="TestButton" Content="연결 테스트"
-                    HorizontalAlignment="Left" Padding="12,4" Margin="0,4,0,4"
-                    Click="TestButton_Click"/>
-            <TextBlock x:Name="TestResultText" FontSize="12" Margin="0,0,0,8"
-                       TextWrapping="Wrap"/>
+                <!-- Target DB -->
+                <TextBlock Text="TARGET DB ID (또는 URL)" Style="{StaticResource FieldLabelStyle}"/>
+                <TextBox x:Name="DbIdBox"/>
 
-            <Separator Margin="0,6,0,6"/>
+                <!-- Category property name -->
+                <TextBlock Text="CATEGORY PROPERTY 이름" Style="{StaticResource FieldLabelStyle}"/>
+                <TextBox x:Name="CategoryPropertyBox" Text="Category"/>
 
-            <!-- Category refresh -->
-            <Label>카테고리 옵션</Label>
-            <Button x:Name="RefreshCatButton" Content="옵션 새로고침"
-                    HorizontalAlignment="Left" Padding="12,4" Margin="0,0,0,4"
-                    Click="RefreshCatButton_Click"/>
-            <TextBlock x:Name="CatStatusText" FontSize="12" Margin="0,0,0,8"/>
+                <!-- Test connection -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button x:Name="TestButton" Content="연결 테스트"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Click="TestButton_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="TestResultText" FontSize="12" Margin="0,0,0,12"
+                           TextWrapping="Wrap"/>
 
-            <Separator Margin="0,6,0,6"/>
+                <Separator Background="#EEEEEE" Margin="0,4,0,0"/>
 
-            <!-- Color swap -->
-            <CheckBox x:Name="ColorSwapCheck" Content="색상 Swap (흑↔백)" Margin="0,4"/>
+                <!-- Category refresh -->
+                <TextBlock Text="카테고리 옵션" Style="{StaticResource SectionHeadingStyle}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button x:Name="RefreshCatButton" Content="옵션 새로고침"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Click="RefreshCatButton_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="CatStatusText" FontSize="12" Foreground="#555555"
+                           Margin="0,0,0,12"/>
 
-            <!-- Preview swatches -->
-            <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
-                <Border Width="80" Height="40" BorderThickness="1" BorderBrush="#ccc"
-                        Background="Black">
-                    <TextBlock Foreground="White" HorizontalAlignment="Center"
-                               VerticalAlignment="Center" FontSize="10">기본</TextBlock>
-                </Border>
-                <TextBlock VerticalAlignment="Center" Margin="8,0" FontSize="14">⇔</TextBlock>
-                <Border Width="80" Height="40" BorderThickness="1" BorderBrush="#ccc"
-                        Background="White">
-                    <TextBlock Foreground="Black" HorizontalAlignment="Center"
-                               VerticalAlignment="Center" FontSize="10">Swap</TextBlock>
-                </Border>
+                <Separator Background="#EEEEEE" Margin="0,4,0,0"/>
+
+                <!-- Options -->
+                <TextBlock Text="옵션" Style="{StaticResource SectionHeadingStyle}"/>
+
+                <CheckBox x:Name="ColorSwapCheck" Content="색상 Swap (흑↔백)"/>
+                <CheckBox x:Name="AutostartCheck" Content="Windows 시작 시 자동 실행"/>
+
+                <Separator Background="#EEEEEE" Margin="0,8,0,16"/>
+
+                <!-- Save button -->
+                <Button x:Name="SaveButton" Content="저장"
+                        HorizontalAlignment="Right"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        IsDefault="True"
+                        Click="SaveButton_Click"/>
             </StackPanel>
-
-            <!-- Autostart -->
-            <CheckBox x:Name="AutostartCheck" Content="Windows 시작 시 자동 실행" Margin="0,4"/>
-
-            <Separator Margin="0,6,0,6"/>
-
-            <!-- Save button -->
-            <Button x:Name="SaveButton" Content="저장"
-                    HorizontalAlignment="Right" Padding="20,6"
-                    IsDefault="True"
-                    Click="SaveButton_Click"/>
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </Window>
