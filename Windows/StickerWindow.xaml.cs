@@ -314,13 +314,19 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _loading = true;
         try
         {
+            bool rtfLoaded = false;
             if (!string.IsNullOrEmpty(_sticker.BodyRtf))
             {
-                using var ms = new System.IO.MemoryStream(Encoding.ASCII.GetBytes(_sticker.BodyRtf));
-                new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
-                    .Load(ms, DataFormats.Rtf);
+                try
+                {
+                    using var ms = new System.IO.MemoryStream(Encoding.ASCII.GetBytes(_sticker.BodyRtf));
+                    new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
+                        .Load(ms, DataFormats.Rtf);
+                    rtfLoaded = true;
+                }
+                catch { }
             }
-            else if (!string.IsNullOrEmpty(_sticker.Body))
+            if (!rtfLoaded && !string.IsNullOrEmpty(_sticker.Body))
             {
                 BodyBox.Document.Blocks.Clear();
                 BodyBox.Document.Blocks.Add(new Paragraph(new Run(_sticker.Body)));
@@ -344,7 +350,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         range.Save(rtfMs, DataFormats.Rtf);
         _sticker.BodyRtf = Encoding.ASCII.GetString(rtfMs.ToArray());
 
-        _sticker.Body = range.Text;
+        _sticker.Body = range.Text.Replace("\r\n", "\n").TrimEnd('\n');
     }
 
     private bool IsBodyEmpty()

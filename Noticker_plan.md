@@ -297,3 +297,16 @@ CREATE TABLE settings (
 - 화면 와이어프레임 스케치 (설정 창, 스티커 UI, 트레이 메뉴)
 - Notion API 호출 시퀀스 다이어그램 (생성, 업데이트, 재생성 시나리오)
 - 바로 vibe coding 시작
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | SELECTIVE EXPANSION mode, Ctrl+B/U cherry-pick accepted |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR (CODE) | 2 bugs fixed: RTF crash-on-load → try-catch+fallback; Body \\r\\n regression → TrimEnd |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR (FULL) | score: 5/10 → 8/10, 5 decisions |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **UNRESOLVED:** 0 decisions outstanding
+- **VERDICT:** CEO + ENG (×2) + DESIGN CLEARED — ready to ship. Eng review required gate satisfied.
