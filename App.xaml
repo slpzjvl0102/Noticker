@@ -4,5 +4,6 @@
              xmlns:local="clr-namespace:Noticker"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Application.Resources>
 </Application>

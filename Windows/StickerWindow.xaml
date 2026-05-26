@@ -6,7 +6,7 @@
         ShowInTaskbar="False"
         AllowsTransparency="True"
         Background="Transparent"
-        MinWidth="166" MinHeight="136"
+        MinWidth="166" MinHeight="172"
         SizeToContent="Manual">
 
     <Window.Resources>
@@ -50,18 +50,6 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="CaretBrush" Value="{Binding TitleForeground}"/>
             <Setter Property="Foreground" Value="{Binding TitleForeground}"/>
-        </Style>
-        <Style x:Key="BodyBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="6,4"/>
-            <Setter Property="AcceptsReturn" Value="True"/>
-            <Setter Property="AcceptsTab" Value="False"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="CaretBrush" Value="{Binding BodyForeground}"/>
-            <Setter Property="Foreground" Value="{Binding BodyForeground}"/>
         </Style>
 
         <!-- Minimal ComboBox — removes Windows chrome from the dark bar -->
@@ -169,6 +157,32 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- ToggleButton style for Bold / Underline -->
+        <Style x:Key="FormatToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{Binding TitleForeground}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" Background="Transparent" CornerRadius="3"
+                                Padding="3,1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#28808080"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#50808080"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Outer border provides shadow clearance; DropShadowEffect renders into the 10px margin -->
@@ -182,12 +196,13 @@
             </Border.Effect>
         <Grid Background="{Binding BodyBackground}">
             <Grid.RowDefinitions>
-                <RowDefinition Height="28"/>
+                <RowDefinition Height="36"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="28"/>
                 <RowDefinition Height="24"/>
             </Grid.RowDefinitions>
 
-            <!-- Top bar: drag handle, sync dot, title, X button -->
+            <!-- Row 0: Top bar: drag handle, sync dot, title, X button -->
             <Grid Grid.Row="0" Background="{Binding TitleBackground}"
                   MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
@@ -244,36 +259,77 @@
                         Click="DeleteButton_Click"/>
             </Grid>
 
-            <!-- Body text area with placeholder -->
+            <!-- Row 1: Body text area with placeholder -->
             <Grid Grid.Row="1">
-                <TextBox x:Name="BodyBox"
-                         Style="{StaticResource BodyBoxStyle}"
-                         Text="{Binding Body, UpdateSourceTrigger=PropertyChanged}"
-                         Background="{Binding BodyBackground}"
-                         TabIndex="1"
-                         TextChanged="BodyBox_TextChanged"/>
-                <TextBlock Text="메모..."
+                <RichTextBox x:Name="BodyBox"
+                             Background="{Binding BodyBackground}"
+                             Foreground="{Binding BodyForeground}"
+                             BorderThickness="0"
+                             Padding="6,4"
+                             AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             FontSize="13"
+                             TabIndex="1"
+                             TextChanged="BodyBox_TextChanged"
+                             SelectionChanged="BodyBox_SelectionChanged"/>
+                <TextBlock x:Name="BodyPlaceholder"
+                           Text="메모..."
                            Foreground="{Binding BodyForeground}"
                            Opacity="0.35"
-                           Padding="6,4"
+                           Padding="12,8"
                            VerticalAlignment="Top"
                            FontSize="13"
-                           IsHitTestVisible="False">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ElementName=BodyBox, Path=Text.Length}" Value="0">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                           IsHitTestVisible="False"
+                           Visibility="Visible"/>
             </Grid>
 
-            <!-- Bottom bar: category dropdown + char counter -->
-            <Grid Grid.Row="2" Background="{Binding TitleBackground}">
+            <!-- Row 2: Formatting bar (visible only when window is active) -->
+            <Grid Grid.Row="2" Background="{Binding TitleBackground}"
+                  Visibility="{Binding IsFormattingBarVisible,
+                      Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
+
+                    <!-- Font family dropdown -->
+                    <ComboBox x:Name="FontFamilyBox"
+                              ItemsSource="{Binding AvailableFonts}"
+                              SelectedValue="{Binding StickerFontFamily}"
+                              Foreground="{Binding TitleForeground}"
+                              Width="120" Margin="0,0,4,0"
+                              FontSize="12"
+                              Style="{StaticResource StickerComboBoxStyle}"
+                              Padding="4,0" TabIndex="4"
+                              SelectionChanged="FontFamilyBox_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontFamily="{Binding}" FontSize="12"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <!-- Bold -->
+                    <ToggleButton x:Name="BoldButton"
+                                  Style="{StaticResource FormatToggleStyle}"
+                                  Width="22" Height="22" Margin="2,0"
+                                  ToolTip="굵게 (Ctrl+B)"
+                                  Click="BoldButton_Click">
+                        <TextBlock Text="B" FontWeight="Bold" FontSize="12"
+                                   Foreground="{Binding TitleForeground}"/>
+                    </ToggleButton>
+
+                    <!-- Underline -->
+                    <ToggleButton x:Name="UnderlineButton"
+                                  Style="{StaticResource FormatToggleStyle}"
+                                  Width="22" Height="22" Margin="2,0"
+                                  ToolTip="밑줄 (Ctrl+U)"
+                                  Click="UnderlineButton_Click">
+                        <TextBlock Text="U" TextDecorations="Underline" FontSize="12"
+                                   Foreground="{Binding TitleForeground}"/>
+                    </ToggleButton>
+                </StackPanel>
+            </Grid>
+
+            <!-- Row 3: Bottom bar: category dropdown + char counter + resize handle -->
+            <Grid Grid.Row="3" Background="{Binding TitleBackground}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>

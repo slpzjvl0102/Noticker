@@ -15,6 +15,8 @@ public class Sticker
     public string SyncState { get; set; } = "pending";
     public int RetryCount { get; set; }
     public string? LastSyncedAt { get; set; }
+    public string? BodyRtf { get; set; }
+    public string FontFamily { get; set; } = "";
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("O");
     public string UpdatedAt { get; set; } = DateTime.UtcNow.ToString("O");
 }

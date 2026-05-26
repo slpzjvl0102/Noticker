@@ -37,6 +37,32 @@ public class StickerRepository
             );
             """;
         cmd.ExecuteNonQuery();
+        MigrateIfNeeded(conn);
+    }
+
+    private static void MigrateIfNeeded(SqliteConnection conn)
+    {
+        int version;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA user_version";
+            version = Convert.ToInt32(cmd.ExecuteScalar());
+        }
+        if (version < 2) MigrateToV2(conn);
+    }
+
+    private static void MigrateToV2(SqliteConnection conn)
+    {
+        using var tx = conn.BeginTransaction();
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN body_rtf TEXT";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN font_family TEXT NOT NULL DEFAULT ''";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "PRAGMA user_version = 2";
+        cmd.ExecuteNonQuery();
+        tx.Commit();
     }
 
     public List<Sticker> GetAll()
@@ -60,11 +86,13 @@ public class StickerRepository
                 INSERT INTO stickers
                     (id, notion_page_id, title, body, category,
                      monitor_device_name, position_x, position_y, width, height,
-                     sync_state, retry_count, last_synced_at, created_at, updated_at)
+                     sync_state, retry_count, last_synced_at, created_at, updated_at,
+                     body_rtf, font_family)
                 VALUES
                     ($id, $npid, $title, $body, $cat,
                      $dev, $x, $y, $w, $h,
-                     $ss, $rc, $lsa, $ca, $ua)
+                     $ss, $rc, $lsa, $ca, $ua,
+                     $body_rtf, $font_family)
                 """;
             Bind(cmd, s);
             cmd.ExecuteNonQuery();
@@ -96,7 +124,9 @@ public class StickerRepository
                     sync_state          = $ss,
                     retry_count         = $rc,
                     last_synced_at      = $lsa,
-                    updated_at          = $ua
+                    updated_at          = $ua,
+                    body_rtf            = $body_rtf,
+                    font_family         = $font_family
                 WHERE id = $id
                 """;
             Bind(cmd, s);
@@ -196,6 +226,8 @@ public class StickerRepository
         cmd.Parameters.AddWithValue("$lsa", (object?)s.LastSyncedAt ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$ca", s.CreatedAt);
         cmd.Parameters.AddWithValue("$ua", s.UpdatedAt);
+        cmd.Parameters.AddWithValue("$body_rtf", (object?)s.BodyRtf ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$font_family", s.FontFamily);
     }
 
     private static Sticker Map(SqliteDataReader r) => new()
@@ -215,5 +247,7 @@ public class StickerRepository
         LastSyncedAt = r.IsDBNull(r.GetOrdinal("last_synced_at")) ? null : r.GetString(r.GetOrdinal("last_synced_at")),
         CreatedAt = r.GetString(r.GetOrdinal("created_at")),
         UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+        BodyRtf = r.IsDBNull(r.GetOrdinal("body_rtf")) ? null : r.GetString(r.GetOrdinal("body_rtf")),
+        FontFamily = r.GetString(r.GetOrdinal("font_family")),
     };
 }

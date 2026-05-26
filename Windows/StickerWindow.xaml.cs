@@ -1,11 +1,15 @@
 using System.ComponentModel;
+using System.Text;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Threading;
+using System.Windows.Media;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
+using DataFormats = System.Windows.DataFormats;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using Noticker.Data;
 using Noticker.Models;
@@ -19,6 +23,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     private readonly StickerRepository _repo;
     private readonly DebouncedSyncService _debounce;
     private bool _loading = true;
+    private bool _formattingBarVisible = false;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify(string name) =>
@@ -33,15 +38,35 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
 
-        // Bind color swap from AppSettings
         AppSettings.Instance.PropertyChanged += OnAppSettingsChanged;
 
-        // Populate category list
         RefreshCategoryOptions();
         CategoryBox.SelectedValue = _sticker.Category;
 
+        LoadBody();
+
         _loading = false;
         UpdateSyncIndicator();
+    }
+
+    // ── Formatting bar visibility ──────────────────────────────────────────────
+
+    public bool IsFormattingBarVisible
+    {
+        get => _formattingBarVisible;
+        private set { _formattingBarVisible = value; Notify(nameof(IsFormattingBarVisible)); }
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        IsFormattingBarVisible = true;
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        IsFormattingBarVisible = false;
     }
 
     // ── Data bindings ──────────────────────────────────────────────────────────
@@ -50,12 +75,6 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         get => _sticker.Title;
         set { _sticker.Title = value; Notify(nameof(StickerTitle)); }
-    }
-
-    public string Body
-    {
-        get => _sticker.Body;
-        set { _sticker.Body = value; Notify(nameof(Body)); UpdateCharCounter(); }
     }
 
     public string? Category
@@ -75,6 +94,38 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     }
 
     public bool HasCategoryOptions => AppSettings.Instance.CategoryOptions.Count > 0;
+
+    // ── Font / formatting ──────────────────────────────────────────────────────
+
+    private static readonly string[] _iconFontPrefixes =
+        ["Wingdings", "Symbol", "Marlett", "Webdings", "MT Extra", "MS Outlook"];
+
+    private static readonly IReadOnlyList<string> _availableFonts = Fonts.SystemFontFamilies
+        .Select(f => f.Source)
+        .Where(name => !_iconFontPrefixes
+            .Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        .OrderBy(n => n)
+        .ToList();
+
+    public IReadOnlyList<string> AvailableFonts => _availableFonts;
+
+    public string StickerFontFamily
+    {
+        get => _sticker.FontFamily;
+        set
+        {
+            _sticker.FontFamily = value;
+            Notify(nameof(StickerFontFamily));
+            ApplyFontToDocument();
+        }
+    }
+
+    private void ApplyFontToDocument()
+    {
+        if (string.IsNullOrEmpty(_sticker.FontFamily)) return;
+        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
+        range.ApplyPropertyValue(TextElement.FontFamilyProperty, new System.Windows.Media.FontFamily(_sticker.FontFamily));
+    }
 
     // ── Colors (driven by AppSettings.ColorSwapped + category) ───────────────
 
@@ -131,9 +182,25 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Char counter ───────────────────────────────────────────────────────────
 
-    public string CharCounterText => $"{_sticker.Body.Length:N0}자";
-    public Visibility CharCounterVisibility =>
-        _sticker.Body.Length >= 1800 ? Visibility.Visible : Visibility.Collapsed;
+    public string CharCounterText
+    {
+        get
+        {
+            if (BodyBox == null) return "0자";
+            var t = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
+            return $"{t.Length:N0}자";
+        }
+    }
+
+    public Visibility CharCounterVisibility
+    {
+        get
+        {
+            if (BodyBox == null) return Visibility.Collapsed;
+            var t = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
+            return t.Length >= 1800 ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
 
     // ── Event handlers ─────────────────────────────────────────────────────────
 
@@ -146,10 +213,10 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     private void TitleBox_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        e.Handled = false; // allow focus without triggering DragMove
+        e.Handled = false;
     }
 
-    private void TitleBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void TitleBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
         _sticker.Title = TitleBox.Text;
@@ -158,16 +225,42 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _debounce.OnChanged(_sticker);
     }
 
-    private void BodyBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void BodyBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
-        _sticker.Body = BodyBox.Text;
-        SaveContent();
+        SaveBodyContent();
         UpdateCharCounter();
+        _debounce.OnChanged(_sticker);
+        BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+        SyncFormattingButtons();
+    }
+
+    private void BodyBox_SelectionChanged(object sender, RoutedEventArgs e) =>
+        SyncFormattingButtons();
+
+    private void BoldButton_Click(object sender, RoutedEventArgs e)
+    {
+        var newWeight = BoldButton.IsChecked == true ? FontWeights.Bold : FontWeights.Normal;
+        BodyBox.Selection.ApplyPropertyValue(TextElement.FontWeightProperty, newWeight);
+        BodyBox.Focus();
+    }
+
+    private void UnderlineButton_Click(object sender, RoutedEventArgs e)
+    {
+        var newDeco = UnderlineButton.IsChecked == true ? TextDecorations.Underline : null;
+        BodyBox.Selection.ApplyPropertyValue(Inline.TextDecorationsProperty, newDeco);
+        BodyBox.Focus();
+    }
+
+    private void FontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading) return;
+        _sticker.FontFamily = FontFamilyBox.SelectedValue as string ?? "";
+        SaveContent();
         _debounce.OnChanged(_sticker);
     }
 
-    private void CategoryBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void CategoryBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
         _sticker.Category = CategoryBox.SelectedValue as string;
@@ -216,8 +309,53 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
+    private void LoadBody()
+    {
+        _loading = true;
+        try
+        {
+            if (!string.IsNullOrEmpty(_sticker.BodyRtf))
+            {
+                using var ms = new System.IO.MemoryStream(Encoding.ASCII.GetBytes(_sticker.BodyRtf));
+                new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
+                    .Load(ms, DataFormats.Rtf);
+            }
+            else if (!string.IsNullOrEmpty(_sticker.Body))
+            {
+                BodyBox.Document.Blocks.Clear();
+                BodyBox.Document.Blocks.Add(new Paragraph(new Run(_sticker.Body)));
+            }
+
+            if (!string.IsNullOrEmpty(_sticker.FontFamily))
+                FontFamilyBox.SelectedValue = _sticker.FontFamily;
+        }
+        finally
+        {
+            _loading = false;
+        }
+        BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void SaveBodyContent()
+    {
+        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
+
+        using var rtfMs = new System.IO.MemoryStream();
+        range.Save(rtfMs, DataFormats.Rtf);
+        _sticker.BodyRtf = Encoding.ASCII.GetString(rtfMs.ToArray());
+
+        _sticker.Body = range.Text;
+    }
+
+    private bool IsBodyEmpty()
+    {
+        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
+        return string.IsNullOrWhiteSpace(range.Text);
+    }
+
     private void SaveContent()
     {
+        SaveBodyContent();
         _sticker.UpdatedAt = DateTime.UtcNow.ToString("O");
         _sticker.SyncState = "pending";
         try { _repo.Update(_sticker); }
@@ -262,6 +400,17 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         Notify(nameof(CharCounterText));
         Notify(nameof(CharCounterVisibility));
+    }
+
+    private void SyncFormattingButtons()
+    {
+        var weight = BodyBox.Selection.GetPropertyValue(TextElement.FontWeightProperty);
+        BoldButton.IsChecked = weight is FontWeight fw && fw == FontWeights.Bold;
+
+        var deco = BodyBox.Selection.GetPropertyValue(Inline.TextDecorationsProperty);
+        UnderlineButton.IsChecked = deco is TextDecorationCollection tdc &&
+                                    tdc.Count > 0 &&
+                                    tdc[0].Location == TextDecorationLocation.Underline;
     }
 
     private void OnAppSettingsChanged(object? sender, PropertyChangedEventArgs e)
