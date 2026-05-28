@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /c/Users/jungw/.gstack/projects/slpzjvl0102-Noticker/main-autoplan-restore-20260526-224235.md -->
 # Sticky-Notion PRD
 
 Notion 연동 스티커메모 데스크탑 앱 기획 문서. v1 기준.

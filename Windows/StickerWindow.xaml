@@ -189,22 +189,25 @@
     <Border Margin="10">
 
         <!-- Inner content border — CornerRadius and shadow on same element so the shadow follows the rounded shape -->
-        <Border BorderThickness="1" BorderBrush="#30808080" CornerRadius="8">
+        <Border BorderThickness="1" BorderBrush="#30808080" CornerRadius="8"
+                Background="{Binding BodyBackground}">
             <Border.Effect>
                 <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.45"
                                   ShadowDepth="4" Direction="270"/>
             </Border.Effect>
-        <Grid Background="{Binding BodyBackground}">
+        <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="36"/>
+                <RowDefinition Height="28"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="28"/>
                 <RowDefinition Height="24"/>
             </Grid.RowDefinitions>
 
             <!-- Row 0: Top bar: drag handle, sync dot, title, X button -->
-            <Grid Grid.Row="0" Background="{Binding TitleBackground}"
-                  MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Border Grid.Row="0" Background="{Binding TitleBackground}"
+                    CornerRadius="8 8 0 0"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="18"/>
                     <ColumnDefinition Width="*"/>
@@ -258,6 +261,7 @@
                         TabIndex="3"
                         Click="DeleteButton_Click"/>
             </Grid>
+            </Border>
 
             <!-- Row 1: Body text area with placeholder -->
             <Grid Grid.Row="1">
@@ -270,6 +274,7 @@
                              VerticalScrollBarVisibility="Auto"
                              FontSize="13"
                              TabIndex="1"
+                             PreviewKeyDown="BodyBox_PreviewKeyDown"
                              TextChanged="BodyBox_TextChanged"
                              SelectionChanged="BodyBox_SelectionChanged"/>
                 <TextBlock x:Name="BodyPlaceholder"
@@ -325,11 +330,33 @@
                         <TextBlock Text="U" TextDecorations="Underline" FontSize="12"
                                    Foreground="{Binding TitleForeground}"/>
                     </ToggleButton>
+
+                    <!-- Bullet list -->
+                    <ToggleButton x:Name="BulletButton"
+                                  Style="{StaticResource FormatToggleStyle}"
+                                  Width="22" Height="22" Margin="2,0"
+                                  ToolTip="불릿 리스트 (- + Space)"
+                                  Click="BulletButton_Click">
+                        <TextBlock Text="•" FontSize="14"
+                                   Foreground="{Binding TitleForeground}"/>
+                    </ToggleButton>
+
+                    <!-- Numbered list -->
+                    <ToggleButton x:Name="NumberButton"
+                                  Style="{StaticResource FormatToggleStyle}"
+                                  Width="22" Height="22" Margin="2,0"
+                                  ToolTip="번호 리스트 (1. + Space)"
+                                  Click="NumberButton_Click">
+                        <TextBlock Text="1." FontSize="11"
+                                   Foreground="{Binding TitleForeground}"/>
+                    </ToggleButton>
                 </StackPanel>
             </Grid>
 
             <!-- Row 3: Bottom bar: category dropdown + char counter + resize handle -->
-            <Grid Grid.Row="3" Background="{Binding TitleBackground}">
+            <Border Grid.Row="3" Background="{Binding TitleBackground}"
+                    CornerRadius="0 0 8 8">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -371,6 +398,7 @@
                        Background="Transparent"
                        Template="{StaticResource ResizeHandleTemplate}"/>
             </Grid>
+            </Border>
         </Grid>
         </Border>
     </Border>

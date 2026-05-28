@@ -10,6 +10,7 @@ using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
 using DataFormats = System.Windows.DataFormats;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using Noticker.Data;
 using Noticker.Models;
@@ -101,7 +102,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         ["Wingdings", "Symbol", "Marlett", "Webdings", "MT Extra", "MS Outlook"];
 
     private static readonly IReadOnlyList<string> _availableFonts = Fonts.SystemFontFamilies
-        .Select(f => f.Source)
+        .Select(f => f.FamilyNames.TryGetValue(
+            System.Windows.Markup.XmlLanguage.GetLanguage("en-US"), out var n) ? n : f.Source)
         .Where(name => !_iconFontPrefixes
             .Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
         .OrderBy(n => n)
@@ -116,15 +118,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         {
             _sticker.FontFamily = value;
             Notify(nameof(StickerFontFamily));
-            ApplyFontToDocument();
         }
-    }
-
-    private void ApplyFontToDocument()
-    {
-        if (string.IsNullOrEmpty(_sticker.FontFamily)) return;
-        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
-        range.ApplyPropertyValue(TextElement.FontFamilyProperty, new System.Windows.Media.FontFamily(_sticker.FontFamily));
     }
 
     // ── Colors (driven by AppSettings.ColorSwapped + category) ───────────────
@@ -252,10 +246,52 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         BodyBox.Focus();
     }
 
+    private void BulletButton_Click(object sender, RoutedEventArgs e)
+    {
+        EditingCommands.ToggleBullets.Execute(null, BodyBox);
+        BodyBox.Focus();
+    }
+
+    private void NumberButton_Click(object sender, RoutedEventArgs e)
+    {
+        EditingCommands.ToggleNumbering.Execute(null, BodyBox);
+        BodyBox.Focus();
+    }
+
+    private void BodyBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space) return;
+        var para = BodyBox.CaretPosition.Paragraph;
+        if (para == null || para.Parent is ListItem) return;
+
+        var text = new TextRange(para.ContentStart, BodyBox.CaretPosition).Text;
+
+        if (text is "-" or "*")
+        {
+            new TextRange(para.ContentStart, BodyBox.CaretPosition).Text = "";
+            EditingCommands.ToggleBullets.Execute(null, BodyBox);
+            e.Handled = true;
+        }
+        else if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\d+\.$"))
+        {
+            new TextRange(para.ContentStart, BodyBox.CaretPosition).Text = "";
+            EditingCommands.ToggleNumbering.Execute(null, BodyBox);
+            e.Handled = true;
+        }
+    }
+
     private void FontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
-        _sticker.FontFamily = FontFamilyBox.SelectedValue as string ?? "";
+        var fontFamily = FontFamilyBox.SelectedValue as string ?? "";
+        _sticker.FontFamily = fontFamily;
+        BodyBox.Focus();
+        if (!string.IsNullOrEmpty(fontFamily))
+        {
+            var ff = new System.Windows.Media.FontFamily(fontFamily);
+            BodyBox.FontFamily = ff;
+            BodyBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, ff);
+        }
         SaveContent();
         _debounce.OnChanged(_sticker);
     }
@@ -319,7 +355,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             {
                 try
                 {
-                    using var ms = new System.IO.MemoryStream(Encoding.ASCII.GetBytes(_sticker.BodyRtf));
+                    using var ms = new System.IO.MemoryStream(Encoding.Latin1.GetBytes(_sticker.BodyRtf));
                     new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
                         .Load(ms, DataFormats.Rtf);
                     rtfLoaded = true;
@@ -333,7 +369,10 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             }
 
             if (!string.IsNullOrEmpty(_sticker.FontFamily))
+            {
                 FontFamilyBox.SelectedValue = _sticker.FontFamily;
+                BodyBox.FontFamily = new System.Windows.Media.FontFamily(_sticker.FontFamily);
+            }
         }
         finally
         {
@@ -348,9 +387,29 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
         using var rtfMs = new System.IO.MemoryStream();
         range.Save(rtfMs, DataFormats.Rtf);
-        _sticker.BodyRtf = Encoding.ASCII.GetString(rtfMs.ToArray());
+        _sticker.BodyRtf = Encoding.Latin1.GetString(rtfMs.ToArray());
 
-        _sticker.Body = range.Text.Replace("\r\n", "\n").TrimEnd('\n');
+        var lines = new List<string>();
+        foreach (var block in BodyBox.Document.Blocks)
+        {
+            if (block is Paragraph para)
+            {
+                lines.Add(new TextRange(para.ContentStart, para.ContentEnd).Text);
+            }
+            else if (block is System.Windows.Documents.List list)
+            {
+                bool numbered = list.MarkerStyle == TextMarkerStyle.Decimal;
+                int n = 1;
+                foreach (var item in list.ListItems)
+                    foreach (var inner in item.Blocks)
+                        if (inner is Paragraph innerPara)
+                        {
+                            var text = new TextRange(innerPara.ContentStart, innerPara.ContentEnd).Text;
+                            lines.Add(numbered ? $"{n++}. {text}" : $"• {text}");
+                        }
+            }
+        }
+        _sticker.Body = string.Join("\n", lines).TrimEnd('\n');
     }
 
     private bool IsBodyEmpty()
@@ -417,6 +476,13 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         UnderlineButton.IsChecked = deco is TextDecorationCollection tdc &&
                                     tdc.Count > 0 &&
                                     tdc[0].Location == TextDecorationLocation.Underline;
+
+        var para = BodyBox.CaretPosition.Paragraph;
+        var listParent = para?.Parent;
+        BulletButton.IsChecked = listParent is ListItem li1 &&
+                                 li1.List?.MarkerStyle == TextMarkerStyle.Disc;
+        NumberButton.IsChecked = listParent is ListItem li2 &&
+                                 li2.List?.MarkerStyle == TextMarkerStyle.Decimal;
     }
 
     private void OnAppSettingsChanged(object? sender, PropertyChangedEventArgs e)
