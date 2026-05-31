@@ -84,19 +84,13 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <!-- 본문 상단 3줄 (주 내용) -->
-                                <TextBlock x:Name="BodyPreview"
-                                           Text="{Binding Preview}"
+                                <!-- 제목 (주 내용) -->
+                                <TextBlock x:Name="TitleLabel"
+                                           Text="{Binding Title}"
                                            TextTrimming="CharacterEllipsis"
-                                           MaxHeight="54"
-                                           TextWrapping="Wrap"
                                            FontSize="12"/>
-                                <!-- 제목 + 날짜 + 숨김 배지 -->
+                                <!-- 날짜 + 숨김 배지 (보조) -->
                                 <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                    <TextBlock x:Name="TitleLabel"
-                                               Text="{Binding Title}"
-                                               FontSize="10"
-                                               Visibility="{Binding TitleVisibility}"/>
                                     <TextBlock x:Name="DateLabel"
                                                Text="{Binding DateLabel}"
                                                FontSize="10"/>

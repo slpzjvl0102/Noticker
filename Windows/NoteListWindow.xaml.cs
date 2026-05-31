@@ -99,7 +99,6 @@ public partial class NoteListWindow : Window
         var filtered = string.IsNullOrEmpty(q)
             ? _allItems
             : _allItems.Where(i =>
-                i.Preview.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 i.Title.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
 
         NoteList.ItemsSource = filtered;
@@ -134,13 +133,9 @@ public partial class NoteListWindow : Window
                 rowBorder.BorderBrush = _rowBorderColor;
             }
 
-            // Body preview text
-            var bodyPreview = FindVisualChild<TextBlock>(container, "BodyPreview");
-            if (bodyPreview != null) bodyPreview.Foreground = _textFg;
-
-            // Title label
+            // Title label (주 내용)
             var titleLabel = FindVisualChild<TextBlock>(container, "TitleLabel");
-            if (titleLabel != null) titleLabel.Foreground = _mutedFg;
+            if (titleLabel != null) titleLabel.Foreground = _textFg;
 
             // Date label
             var dateLabel = FindVisualChild<TextBlock>(container, "DateLabel");
@@ -189,28 +184,15 @@ public partial class NoteListWindow : Window
         }
     }
 
-    private record NoteItem(string Id, string Title, string Preview, string DateLabel,
-                            string IsHiddenBadge, string TitleVisibility)
+    private record NoteItem(string Id, string Title, string DateLabel, string IsHiddenBadge)
     {
         public static NoteItem From(string id, string title, string body, string updatedAt, bool isHidden)
         {
-            // 본문 상단 3줄 추출
-            var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var preview = lines.Length > 0
-                ? string.Join("\n", lines.Take(3))
-                : "(빈 메모)";
-
+            var displayTitle = !string.IsNullOrWhiteSpace(title) ? title : "(제목 없음)";
             var dateLabel = DateTime.TryParse(updatedAt, out var dt)
                 ? dt.ToLocalTime().ToString("yyyy년 M월 d일")
                 : "";
-
-            var hasTitle = !string.IsNullOrWhiteSpace(title);
-            var titleDisplay = hasTitle ? title + "  ·  " : "";
-
-            return new NoteItem(
-                id, titleDisplay, preview, dateLabel,
-                isHidden ? "Visible" : "Collapsed",
-                hasTitle ? "Visible" : "Collapsed");
+            return new NoteItem(id, displayTitle, dateLabel, isHidden ? "Visible" : "Collapsed");
         }
     }
 }
