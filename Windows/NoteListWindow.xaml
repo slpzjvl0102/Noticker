@@ -6,16 +6,16 @@
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False"
         ResizeMode="CanResize">
-    <DockPanel>
-        <!-- 검색 (WPF에 PlaceholderText 없음 → overlay TextBlock 방식) -->
-        <Border DockPanel.Dock="Top" Padding="8,6" BorderThickness="0,0,0,1"
-                BorderBrush="#DDDDDD">
+    <DockPanel x:Name="RootPanel">
+        <!-- 검색 -->
+        <Border x:Name="SearchBorder" DockPanel.Dock="Top" Padding="8,6"
+                BorderThickness="0,0,0,1">
             <Grid>
                 <TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged"
-                         Padding="4,4" BorderThickness="1" BorderBrush="#CCCCCC"
-                         Background="White"/>
-                <TextBlock Text="검색..." Foreground="#AAAAAA" Padding="6,4"
-                           IsHitTestVisible="False" VerticalAlignment="Center">
+                         Padding="4,4" BorderThickness="1"/>
+                <TextBlock x:Name="SearchPlaceholder" Text="검색..."
+                           Padding="6,4" IsHitTestVisible="False"
+                           VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -35,7 +35,6 @@
                    Visibility="Collapsed"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   Foreground="#AAAAAA"
                    FontSize="12"
                    TextWrapping="Wrap"
                    Margin="24,0"
@@ -52,27 +51,56 @@
                     <Setter Property="Padding" Value="0"/>
                     <Setter Property="Margin" Value="0"/>
                     <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border x:Name="ItemBorder" Background="Transparent">
+                                    <ContentPresenter/>
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup x:Name="CommonStates">
+                                            <VisualState x:Name="Normal"/>
+                                            <VisualState x:Name="MouseOver">
+                                                <Storyboard>
+                                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ItemBorder" Storyboard.TargetProperty="Background">
+                                                        <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static SystemColors.HighlightBrush}"/>
+                                                    </ObjectAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Border Padding="12,8" BorderThickness="0,0,0,1"
-                            BorderBrush="#F0F0F0">
+                    <Border x:Name="RowBorder" Padding="12,8" BorderThickness="0,0,0,1">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <TextBlock Text="{Binding Body}"
+                                <!-- 본문 상단 3줄 (주 내용) -->
+                                <TextBlock x:Name="BodyPreview"
+                                           Text="{Binding Preview}"
                                            TextTrimming="CharacterEllipsis"
-                                           MaxHeight="48"
+                                           MaxHeight="54"
                                            TextWrapping="Wrap"
                                            FontSize="12"/>
-                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                    <TextBlock Text="{Binding DateLabel}"
-                                               FontSize="10" Foreground="#888"/>
-                                    <TextBlock Text=" · 숨김" FontSize="10" Foreground="#BBBBBB"
+                                <!-- 제목 + 날짜 + 숨김 배지 -->
+                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                    <TextBlock x:Name="TitleLabel"
+                                               Text="{Binding Title}"
+                                               FontSize="10"
+                                               Visibility="{Binding TitleVisibility}"/>
+                                    <TextBlock x:Name="DateLabel"
+                                               Text="{Binding DateLabel}"
+                                               FontSize="10"/>
+                                    <TextBlock Text=" · 숨김" FontSize="10"
                                                Visibility="{Binding IsHiddenBadge}"/>
                                 </StackPanel>
                             </StackPanel>

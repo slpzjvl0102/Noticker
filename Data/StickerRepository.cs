@@ -78,16 +78,16 @@ public class StickerRepository
         tx.Commit();
     }
 
-    public List<(string Id, string Body, string UpdatedAt, bool IsHidden)> GetAllSummary()
+    public List<(string Id, string Title, string Body, string UpdatedAt, bool IsHidden)> GetAllSummary()
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, body, updated_at, is_hidden FROM stickers ORDER BY updated_at DESC";
+        cmd.CommandText = "SELECT id, title, body, updated_at, is_hidden FROM stickers ORDER BY updated_at DESC";
         using var reader = cmd.ExecuteReader();
-        var result = new List<(string, string, string, bool)>();
+        var result = new List<(string, string, string, string, bool)>();
         while (reader.Read())
             result.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2),
-                        reader.GetInt32(3) != 0));
+                        reader.GetString(3), reader.GetInt32(4) != 0));
         return result;
     }
 
