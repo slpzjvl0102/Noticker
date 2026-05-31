@@ -1,0 +1,91 @@
+<Window x:Class="Noticker.Windows.NoteListWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="스티커 메모" Width="320" Height="500"
+        MinWidth="240" MinHeight="300"
+        WindowStyle="SingleBorderWindow"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize">
+    <DockPanel>
+        <!-- 검색 (WPF에 PlaceholderText 없음 → overlay TextBlock 방식) -->
+        <Border DockPanel.Dock="Top" Padding="8,6" BorderThickness="0,0,0,1"
+                BorderBrush="#DDDDDD">
+            <Grid>
+                <TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged"
+                         Padding="4,4" BorderThickness="1" BorderBrush="#CCCCCC"
+                         Background="White"/>
+                <TextBlock Text="검색..." Foreground="#AAAAAA" Padding="6,4"
+                           IsHitTestVisible="False" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=SearchBox, Path=Text.Length}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Border>
+
+        <!-- 빈 상태 메시지 -->
+        <TextBlock x:Name="EmptyLabel"
+                   Visibility="Collapsed"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#AAAAAA"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="24,0"
+                   DockPanel.Dock="Bottom"/>
+
+        <!-- 노트 목록 -->
+        <ListView x:Name="NoteList"
+                  SelectionChanged="NoteList_SelectionChanged"
+                  BorderThickness="0"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="Margin" Value="0"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Padding="12,8" BorderThickness="0,0,0,1"
+                            BorderBrush="#F0F0F0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Body}"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxHeight="48"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="{Binding DateLabel}"
+                                               FontSize="10" Foreground="#888"/>
+                                    <TextBlock Text=" · 숨김" FontSize="10" Foreground="#BBBBBB"
+                                               Visibility="{Binding IsHiddenBadge}"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="삭제"
+                                    Tag="{Binding Id}"
+                                    Click="DeleteButton_Click"
+                                    Padding="6,2" Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Cursor="Hand"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </DockPanel>
+</Window>

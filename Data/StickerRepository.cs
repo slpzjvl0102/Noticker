@@ -49,6 +49,7 @@ public class StickerRepository
             version = Convert.ToInt32(cmd.ExecuteScalar());
         }
         if (version < 2) MigrateToV2(conn);
+        if (version < 3) MigrateToV3(conn);
     }
 
     private static void MigrateToV2(SqliteConnection conn)
@@ -63,6 +64,31 @@ public class StickerRepository
         cmd.CommandText = "PRAGMA user_version = 2";
         cmd.ExecuteNonQuery();
         tx.Commit();
+    }
+
+    private static void MigrateToV3(SqliteConnection conn)
+    {
+        using var tx = conn.BeginTransaction();
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "PRAGMA user_version = 3";
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
+
+    public List<(string Id, string Body, string UpdatedAt, bool IsHidden)> GetAllSummary()
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, body, updated_at, is_hidden FROM stickers ORDER BY updated_at DESC";
+        using var reader = cmd.ExecuteReader();
+        var result = new List<(string, string, string, bool)>();
+        while (reader.Read())
+            result.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                        reader.GetInt32(3) != 0));
+        return result;
     }
 
     public List<Sticker> GetAll()
@@ -87,12 +113,12 @@ public class StickerRepository
                     (id, notion_page_id, title, body, category,
                      monitor_device_name, position_x, position_y, width, height,
                      sync_state, retry_count, last_synced_at, created_at, updated_at,
-                     body_rtf, font_family)
+                     body_rtf, font_family, is_hidden)
                 VALUES
                     ($id, $npid, $title, $body, $cat,
                      $dev, $x, $y, $w, $h,
                      $ss, $rc, $lsa, $ca, $ua,
-                     $body_rtf, $font_family)
+                     $body_rtf, $font_family, $is_hidden)
                 """;
             Bind(cmd, s);
             cmd.ExecuteNonQuery();
@@ -126,7 +152,8 @@ public class StickerRepository
                     last_synced_at      = $lsa,
                     updated_at          = $ua,
                     body_rtf            = $body_rtf,
-                    font_family         = $font_family
+                    font_family         = $font_family,
+                    is_hidden           = $is_hidden
                 WHERE id = $id
                 """;
             Bind(cmd, s);
@@ -228,6 +255,7 @@ public class StickerRepository
         cmd.Parameters.AddWithValue("$ua", s.UpdatedAt);
         cmd.Parameters.AddWithValue("$body_rtf", (object?)s.BodyRtf ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$font_family", s.FontFamily);
+        cmd.Parameters.AddWithValue("$is_hidden", s.IsHidden ? 1 : 0);
     }
 
     private static Sticker Map(SqliteDataReader r) => new()
@@ -249,5 +277,6 @@ public class StickerRepository
         UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
         BodyRtf = r.IsDBNull(r.GetOrdinal("body_rtf")) ? null : r.GetString(r.GetOrdinal("body_rtf")),
         FontFamily = r.GetString(r.GetOrdinal("font_family")),
+        IsHidden = r.GetInt32(r.GetOrdinal("is_hidden")) != 0,
     };
 }

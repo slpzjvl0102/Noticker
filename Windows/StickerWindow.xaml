@@ -211,6 +211,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="18"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="28"/>
                     <ColumnDefinition Width="24"/>
                 </Grid.ColumnDefinitions>
 
@@ -252,14 +253,33 @@
                     </TextBlock>
                 </Grid>
 
-                <!-- Delete button -->
-                <Button Grid.Column="2" Content="×"
+                <!-- Menu button (···) -->
+                <Button x:Name="MenuButton" Grid.Column="2"
+                        Style="{StaticResource DeleteButtonStyle}"
+                        Foreground="{Binding TitleForeground}"
+                        VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                        TabIndex="3"
+                        Click="MenuButton_Click">
+                    <TextBlock Text="···" FontSize="12"
+                               Foreground="{Binding TitleForeground}"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="노트 목록" Click="MenuItem_NoteList_Click"/>
+                            <Separator/>
+                            <MenuItem Header="메모 삭제" Click="MenuItem_Delete_Click"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
+                <!-- Close (hide) button -->
+                <Button Grid.Column="3" Content="×"
                         Style="{StaticResource DeleteButtonStyle}"
                         Foreground="{Binding TitleForeground}"
                         FontSize="16"
                         VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-                        TabIndex="3"
-                        Click="DeleteButton_Click"/>
+                        TabIndex="4"
+                        Click="CloseButton_Click"/>
             </Grid>
             </Border>
 

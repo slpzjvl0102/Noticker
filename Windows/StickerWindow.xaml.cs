@@ -25,6 +25,10 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     private readonly DebouncedSyncService _debounce;
     private bool _loading = true;
     private bool _formattingBarVisible = false;
+    private bool _realClose = false;
+
+    public Sticker Sticker => _sticker;
+    public event EventHandler? RealClosed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify(string name) =>
@@ -324,20 +328,41 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _debounce.OnChanged(_sticker);
     }
 
-    private void DeleteButton_Click(object sender, RoutedEventArgs e)
+    public void CancelDebounce() => _debounce.Cancel();
+
+    public void ForceClose()
+    {
+        _realClose = true;
+        Close();
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Triggers OnClosing hide path
+        Close();
+    }
+
+    private void MenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        MenuButton.ContextMenu.PlacementTarget = MenuButton;
+        MenuButton.ContextMenu.Placement = PlacementMode.Bottom;
+        MenuButton.ContextMenu.IsOpen = true;
+    }
+
+    private void MenuItem_NoteList_Click(object sender, RoutedEventArgs e)
+    {
+        App.Current.OpenNoteList();
+    }
+
+    private void MenuItem_Delete_Click(object sender, RoutedEventArgs e)
     {
         var result = System.Windows.MessageBox.Show(
-            "이 스티커를 삭제할까요?\nNotion에 동기화된 내용은 그대로 유지됩니다.",
-            "스티커 삭제",
-            MessageBoxButton.OKCancel,
+            "이 메모를 삭제할까요?\nNotion에 동기화된 내용은 그대로 유지됩니다.",
+            "메모 삭제",
+            MessageBoxButton.YesNo,
             MessageBoxImage.Question);
-
-        if (result == MessageBoxResult.OK)
-        {
-            _debounce.Cancel();
-            _repo.Delete(_sticker.Id);
-            Close();
-        }
+        if (result == MessageBoxResult.Yes)
+            App.Current.DeleteSticker(_sticker.Id);
     }
 
     private void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
@@ -349,11 +374,21 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         SaveSize();
     }
 
-    protected override void OnClosed(EventArgs e)
+    protected override void OnClosing(CancelEventArgs e)
     {
-        _debounce.Cancel();
-        AppSettings.Instance.PropertyChanged -= OnAppSettingsChanged;
-        base.OnClosed(e);
+        if (App.Current.IsShuttingDown || _realClose)
+        {
+            _debounce.Cancel();
+            AppSettings.Instance.PropertyChanged -= OnAppSettingsChanged;
+            base.OnClosing(e);
+            RealClosed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+        // X / CloseButton → hide
+        e.Cancel = true;
+        _sticker.IsHidden = true;
+        _repo.Update(_sticker);
+        Hide();
     }
 
     protected override void OnLocationChanged(EventArgs e)

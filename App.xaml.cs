@@ -21,7 +21,8 @@ public partial class App : System.Windows.Application
     private CancellationTokenSource _cts = new();
     private System.Windows.Threading.DispatcherTimer? _retryTimer;
 
-    private readonly List<StickerWindow> _stickerWindows = [];
+    private readonly Dictionary<string, StickerWindow> _stickerWindows = [];
+    public bool IsShuttingDown { get; private set; }
 
     public static new App Current => (App)System.Windows.Application.Current;
 
@@ -122,10 +123,11 @@ public partial class App : System.Windows.Application
         _trayIcon.MouseClick += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
-                CreateSticker();
+                OpenNoteList();
         };
 
         var menu = new ContextMenuStrip();
+        menu.Items.Add("노트 목록", null, (_, _) => OpenNoteList());
         menu.Items.Add("새 스티커", null, (_, _) => CreateSticker());
         menu.Items.Add("모든 스티커 표시", null, (_, _) => ShowAllStickers());
         menu.Items.Add("수동 Sync", null, async (_, _) => await RetryPendingAsync());
@@ -179,17 +181,47 @@ public partial class App : System.Windows.Application
         win.Top = y;
         win.Width = s.Width;
         win.Height = s.Height;
-        win.Closed += (_, _) => _stickerWindows.Remove(win);
-        _stickerWindows.Add(win);
+        win.RealClosed += (_, _) => _stickerWindows.Remove(s.Id);
+        _stickerWindows[s.Id] = win;
+        if (!s.IsHidden) win.Show();
+    }
+
+    public void ShowSticker(string id)
+    {
+        if (!_stickerWindows.TryGetValue(id, out var win)) return;
+        win.Sticker.IsHidden = false;
+        StickerRepo!.Update(win.Sticker);
         win.Show();
+        win.Activate();
+    }
+
+    public void DeleteSticker(string id)
+    {
+        if (_stickerWindows.TryGetValue(id, out var win))
+        {
+            win.CancelDebounce();
+            win.ForceClose();
+            // _stickerWindows.Remove handled by RealClosed subscriber
+        }
+        StickerRepo!.Delete(id);
+    }
+
+    public void OpenNoteList()
+    {
+        var existing = Windows.OfType<NoteListWindow>().FirstOrDefault();
+        if (existing != null) { existing.Activate(); return; }
+        new NoteListWindow(StickerRepo!).Show();
     }
 
     private void ShowAllStickers()
     {
-        foreach (var w in _stickerWindows)
+        foreach (var (_, w) in _stickerWindows)
         {
-            w.WindowState = WindowState.Normal;
-            w.Activate();
+            if (!w.Sticker.IsHidden)
+            {
+                w.WindowState = WindowState.Normal;
+                w.Activate();
+            }
         }
     }
 
@@ -240,6 +272,7 @@ public partial class App : System.Windows.Application
 
     private void ExitApp()
     {
+        IsShuttingDown = true;
         _cts.Cancel();
         _retryTimer?.Stop();
         _trayIcon?.Dispose();
