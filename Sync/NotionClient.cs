@@ -186,22 +186,63 @@ public class NotionClient
         return props;
     }
 
-    // Converts body text to Notion paragraph block array (one block per line).
+    // Converts body text to Notion block array.
+    // Lines starting with "• " become bulleted_list_item blocks.
+    // Lines matching "N. " become numbered_list_item blocks.
+    // All other lines become paragraph blocks.
     private static object[] BuildParagraphBlocks(string body)
     {
         if (string.IsNullOrEmpty(body)) return [];
 
-        return body.Split('\n').Select(line => (object)new
+        return body.Split('\n').Select(line =>
         {
-            type = "paragraph",
-            paragraph = new
+            if (line.StartsWith("• "))
             {
-                rich_text = string.IsNullOrEmpty(line)
-                    ? Array.Empty<object>()
-                    : (object)SplitIntoChunks(line, ChunkSize)
-                        .Select(c => new { text = new { content = c } })
-                        .ToArray()
+                var content = line[2..];
+                return (object)new
+                {
+                    type = "bulleted_list_item",
+                    bulleted_list_item = new
+                    {
+                        rich_text = string.IsNullOrEmpty(content)
+                            ? Array.Empty<object>()
+                            : (object)SplitIntoChunks(content, ChunkSize)
+                                .Select(c => new { text = new { content = c } })
+                                .ToArray()
+                    }
+                };
             }
+
+            var m = System.Text.RegularExpressions.Regex.Match(line, @"^\d+\. (.*)$");
+            if (m.Success)
+            {
+                var content = m.Groups[1].Value;
+                return (object)new
+                {
+                    type = "numbered_list_item",
+                    numbered_list_item = new
+                    {
+                        rich_text = string.IsNullOrEmpty(content)
+                            ? Array.Empty<object>()
+                            : (object)SplitIntoChunks(content, ChunkSize)
+                                .Select(c => new { text = new { content = c } })
+                                .ToArray()
+                    }
+                };
+            }
+
+            return (object)new
+            {
+                type = "paragraph",
+                paragraph = new
+                {
+                    rich_text = string.IsNullOrEmpty(line)
+                        ? Array.Empty<object>()
+                        : (object)SplitIntoChunks(line, ChunkSize)
+                            .Select(c => new { text = new { content = c } })
+                            .ToArray()
+                }
+            };
         }).ToArray();
     }
 

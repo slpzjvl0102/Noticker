@@ -39,6 +39,17 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
 
+        // Fix paragraph spacing via FlowDocument.Resources (more reliable than RichTextBox.Resources)
+        var paraStyle = new Style(typeof(Paragraph));
+        paraStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0)));
+        BodyBox.Document.Resources[typeof(Paragraph)] = paraStyle;
+
+        // Fix bullet list indent — Document.Resources style covers newly created lists
+        var listStyle = new Style(typeof(System.Windows.Documents.List));
+        listStyle.Setters.Add(new Setter(System.Windows.Documents.List.MarginProperty, new Thickness(20, 0, 0, 0)));
+        listStyle.Setters.Add(new Setter(System.Windows.Documents.List.PaddingProperty, new Thickness(0)));
+        BodyBox.Document.Resources[typeof(System.Windows.Documents.List)] = listStyle;
+
         AppSettings.Instance.PropertyChanged += OnAppSettingsChanged;
 
         RefreshCategoryOptions();
@@ -222,6 +233,14 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     private void BodyBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
+        // Normalize any newly created List blocks (Document.Resources may not catch all cases)
+        // Margin changes don't trigger TextChanged, so this is safe from re-entrancy.
+        foreach (var block in BodyBox.Document.Blocks)
+            if (block is System.Windows.Documents.List lst && lst.Margin.Left != 20)
+            {
+                lst.Margin = new Thickness(20, 0, 0, 0);
+                lst.Padding = new Thickness(0);
+            }
         SaveBodyContent();
         UpdateCharCounter();
         _debounce.OnChanged(_sticker);
@@ -368,6 +387,10 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
                 BodyBox.Document.Blocks.Add(new Paragraph(new Run(_sticker.Body)));
             }
 
+            // RTF loading sets explicit Margin values on paragraphs, overriding the Document style.
+            // Clear all local Margin values so the Document.Resources style (Margin=0) takes effect.
+            NormalizeDocumentMargins();
+
             if (!string.IsNullOrEmpty(_sticker.FontFamily))
             {
                 FontFamilyBox.SelectedValue = _sticker.FontFamily;
@@ -379,6 +402,25 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             _loading = false;
         }
         BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void NormalizeDocumentMargins()
+    {
+        foreach (var block in BodyBox.Document.Blocks)
+        {
+            block.ClearValue(Block.MarginProperty);
+            if (block is System.Windows.Documents.List list)
+            {
+                list.Margin = new Thickness(20, 0, 0, 0);
+                list.Padding = new Thickness(0);
+                foreach (var item in list.ListItems)
+                {
+                    item.ClearValue(ListItem.MarginProperty);
+                    foreach (var inner in item.Blocks)
+                        inner.ClearValue(Block.MarginProperty);
+                }
+            }
+        }
     }
 
     private void SaveBodyContent()
@@ -405,6 +447,15 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
                         if (inner is Paragraph innerPara)
                         {
                             var text = new TextRange(innerPara.ContentStart, innerPara.ContentEnd).Text;
+                            // WPF RTF round-trip injects the marker char into paragraph text.
+                            // Strip it to avoid double markers in stored body text.
+                            if (!numbered && text.Length > 0 && text[0] == '•')
+                                text = text[1..].TrimStart('\t', ' ');
+                            else if (numbered)
+                            {
+                                var m2 = System.Text.RegularExpressions.Regex.Match(text, @"^\d+[.)]\s");
+                                if (m2.Success) text = text[m2.Length..];
+                            }
                             lines.Add(numbered ? $"{n++}. {text}" : $"• {text}");
                         }
             }
