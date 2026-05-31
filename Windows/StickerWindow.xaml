@@ -265,6 +265,7 @@
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     <Button.ContextMenu>
                         <ContextMenu>
+                            <MenuItem Header="새 스티커" Click="MenuItem_NewSticker_Click"/>
                             <MenuItem Header="노트 목록" Click="MenuItem_NoteList_Click"/>
                             <Separator/>
                             <MenuItem Header="메모 삭제" Click="MenuItem_Delete_Click"/>

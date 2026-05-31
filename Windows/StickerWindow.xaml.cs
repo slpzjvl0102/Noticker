@@ -349,6 +349,11 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         MenuButton.ContextMenu.IsOpen = true;
     }
 
+    private void MenuItem_NewSticker_Click(object sender, RoutedEventArgs e)
+    {
+        App.Current.CreateSticker();
+    }
+
     private void MenuItem_NoteList_Click(object sender, RoutedEventArgs e)
     {
         App.Current.OpenNoteList();
