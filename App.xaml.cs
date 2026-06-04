@@ -279,6 +279,14 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        // Windows reboot/shutdown: mark shutting down so StickerWindow.OnClosing
+        // doesn't persist IsHidden = true for every open sticker.
+        IsShuttingDown = true;
+        base.OnSessionEnding(e);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         _cts.Cancel();

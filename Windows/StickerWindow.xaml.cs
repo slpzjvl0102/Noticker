@@ -245,7 +245,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
                 lst.Margin = new Thickness(20, 0, 0, 0);
                 lst.Padding = new Thickness(0);
             }
-        SaveBodyContent();
+        SaveContent();
         UpdateCharCounter();
         _debounce.OnChanged(_sticker);
         BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
