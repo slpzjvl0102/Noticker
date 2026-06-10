@@ -81,6 +81,8 @@ public class SettingsRepository
             AppSettings.PomodoroLongBreakDefault, AppSettings.PomodoroBreakMin, AppSettings.PomodoroBreakMax);
         settings.PomodoroLongBreakInterval = AppSettings.ParseClamped(Get("pomodoro_long_break_interval"),
             AppSettings.PomodoroIntervalDefault, AppSettings.PomodoroIntervalMin, AppSettings.PomodoroIntervalMax);
+        settings.PomodoroCustomMinutes = AppSettings.ParseClamped(Get("pomodoro_custom_min"),
+            AppSettings.PomodoroCustomDefault, AppSettings.PomodoroBreakMin, AppSettings.PomodoroBreakMax);
         settings.PomodoroAutoStart = Get("pomodoro_auto_start") == "true";
         settings.PomodoroSound = Get("pomodoro_sound") != "false";          // 기본 true
         settings.PomodoroAlwaysOnTop = Get("pomodoro_always_on_top") != "false"; // 기본 true

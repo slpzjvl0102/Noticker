@@ -1,0 +1,42 @@
+<UserControl x:Class="Noticker.Windows.Controls.TimerDial"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             Width="144" Height="144"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
+    <Grid>
+        <!-- 정적 면 캐시 (외곽 링 + 눈금 60 + 숫자 12) — TickBrush/FaceBrush 변경 시에만 재생성 -->
+        <Image x:Name="FaceImage" Width="144" Height="144" Stretch="None"
+               IsHitTestVisible="False"/>
+
+        <!-- 웨지 — geometry 스왑만 per-tick. Fill/Stroke는 IsOutlineOnly에 따라 코드에서 전환 -->
+        <Path x:Name="WedgePath" IsHitTestVisible="False"
+              Opacity="{Binding WedgeOpacity, ElementName=Root}"/>
+
+        <!-- 중앙 플레이트 — 내용(모드 라벨 + MM:SS)은 창이 오버레이 -->
+        <Ellipse x:Name="CenterPlate" Width="54" Height="54"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Fill="{Binding FaceBrush, ElementName=Root}"
+                 Opacity="0.92" Stroke="#30808080" StrokeThickness="1"
+                 IsHitTestVisible="False"/>
+
+        <!-- 노브 — IsSettable일 때만 표시, 웨지 끝각 r60 -->
+        <Path x:Name="Knob" Visibility="Collapsed" IsHitTestVisible="False"
+              Fill="{Binding WedgeBrush, ElementName=Root}"
+              Stroke="{Binding FaceBrush, ElementName=Root}"
+              StrokeThickness="1.5"/>
+
+        <!-- 투명 히트 영역 — Fill=Transparent (null이면 히트 안 됨), IsSettable일 때만 활성 -->
+        <Ellipse x:Name="HitArea" Width="144" Height="144"
+                 Fill="Transparent" IsHitTestVisible="False"
+                 Cursor="Hand"
+                 ToolTip="드래그하여 시간 설정 (휠 ±1분)"
+                 AutomationProperties.Name="타이머 설정"
+                 MouseLeftButtonDown="HitArea_MouseLeftButtonDown"
+                 MouseMove="HitArea_MouseMove"
+                 MouseLeftButtonUp="HitArea_MouseLeftButtonUp"
+                 LostMouseCapture="HitArea_LostMouseCapture"
+                 MouseWheel="HitArea_MouseWheel"/>
+    </Grid>
+</UserControl>

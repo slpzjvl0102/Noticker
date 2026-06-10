@@ -13,6 +13,7 @@ using DataFormats = System.Windows.DataFormats;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using Noticker.Data;
+using Noticker.Infrastructure;
 using Noticker.Models;
 using Noticker.Sync;
 
@@ -142,27 +143,13 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     private static readonly SolidColorBrush _darkGray = new(Color.FromRgb(0x33, 0x33, 0x33));
 
-    private static readonly Dictionary<string, Color> _notionColors = new()
-    {
-        ["default"] = Color.FromRgb(0x33, 0x33, 0x33),
-        ["gray"]    = Color.FromRgb(0x4A, 0x4A, 0x4A),
-        ["brown"]   = Color.FromRgb(0x60, 0x36, 0x1A),
-        ["orange"]  = Color.FromRgb(0x99, 0x4A, 0x00),
-        ["yellow"]  = Color.FromRgb(0x7B, 0x56, 0x0E),
-        ["green"]   = Color.FromRgb(0x1A, 0x5C, 0x3A),
-        ["blue"]    = Color.FromRgb(0x1A, 0x44, 0x80),
-        ["purple"]  = Color.FromRgb(0x4D, 0x21, 0x7A),
-        ["pink"]    = Color.FromRgb(0x80, 0x1D, 0x5A),
-        ["red"]     = Color.FromRgb(0x80, 0x1C, 0x1C),
-    };
-
     private SolidColorBrush? CategoryBarBrush()
     {
         var cat = _sticker.Category;
         if (cat is null) return null;
         var colors = AppSettings.Instance.CategoryColors;
         if (colors.TryGetValue(cat, out var notionColor) &&
-            _notionColors.TryGetValue(notionColor, out var wpfColor))
+            NotionColorPalette.Bar(notionColor) is Color wpfColor)
             return new SolidColorBrush(wpfColor);
         return null;
     }

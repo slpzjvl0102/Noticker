@@ -427,4 +427,277 @@ public class PomodoroServiceTests
         s.Start();
         Assert.True(s.TrayTooltip.Length <= 63, $"'{s.TrayTooltip}' = {s.TrayTooltip.Length} chars");
     }
+
+    // ── TimerKind 전환 ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SwitchKind_OnlyWhenIdle()
+    {
+        var s = NewService();
+        s.Start();
+        s.SwitchKind(TimerKind.Custom);           // Running — 무시
+        Assert.Equal(TimerKind.Pomodoro, s.Kind);
+
+        s.Pause();
+        s.SwitchKind(TimerKind.Custom);           // Paused — 무시
+        Assert.Equal(TimerKind.Pomodoro, s.Kind);
+
+        s.Reset();
+        s.SwitchKind(TimerKind.Custom);           // Idle — 전환
+        Assert.Equal(TimerKind.Custom, s.Kind);
+    }
+
+    [Fact]
+    public void SwitchKind_SameKind_DoesNotFireChanged()
+    {
+        var s = NewService();
+        int changed = 0;
+        s.Changed += (_, _) => changed++;
+
+        s.SwitchKind(TimerKind.Pomodoro);         // 같은 kind — 미발화
+        Assert.Equal(0, changed);
+
+        s.SwitchKind(TimerKind.Custom);           // 실제 전환 — 발화
+        Assert.Equal(1, changed);
+
+        s.SwitchKind(TimerKind.Custom);           // 같은 kind — 미발화
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void SwitchKind_RoundTrip_PreservesModeAndFocusCount()
+    {
+        var s = NewService();
+        s.Start();
+        CompleteSession(s, 25);                   // 집중 1 완료 → 짧은 휴식 Idle
+        Assert.Equal(PomodoroMode.ShortBreak, s.Mode);
+        Assert.Equal(1, s.CompletedFocusCount);
+
+        s.SwitchKind(TimerKind.Custom);
+        s.SwitchKind(TimerKind.Pomodoro);         // 왕복 — 사이클이 멈춘 자리에서 재개
+        Assert.Equal(PomodoroMode.ShortBreak, s.Mode);
+        Assert.Equal(1, s.CompletedFocusCount);
+        Assert.Equal(TimeSpan.FromMinutes(5), s.Remaining);
+    }
+
+    // ── 커스텀 지속시간 ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SetCustomDuration_ClampsRange1To60()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        s.SetCustomDuration(0);
+        Assert.Equal(1, s.CustomMinutes);
+        s.SetCustomDuration(999);
+        Assert.Equal(60, s.CustomMinutes);
+        s.SetCustomDuration(45);
+        Assert.Equal(45, s.CustomMinutes);
+    }
+
+    [Fact]
+    public void SetCustomDuration_OnlyCustomIdle()
+    {
+        var s = NewService();
+        s.SetCustomDuration(10);                  // Pomodoro kind — 무시
+        Assert.Equal(30, s.CustomMinutes);
+
+        s.SwitchKind(TimerKind.Custom);
+        s.Start();
+        s.SetCustomDuration(10);                  // Custom + Running — 무시
+        Assert.Equal(30, s.CustomMinutes);
+    }
+
+    [Fact]
+    public void SetCustomDuration_FiresChanged_OnRealChange()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        int changed = 0;
+        s.Changed += (_, _) => changed++;
+
+        s.SetCustomDuration(30);                  // 기본값 30 그대로 — 미발화
+        Assert.Equal(0, changed);
+        s.SetCustomDuration(45);                  // 실제 변경 — 발화
+        Assert.Equal(1, changed);
+        s.SetCustomDuration(45);                  // 동일 값 — 미발화
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void CustomIdle_Remaining_EqualsCustomMinutes()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        Assert.Equal(TimeSpan.FromMinutes(30), s.Remaining);   // 기본 30
+
+        s.SetCustomDuration(45);
+        Assert.Equal(TimeSpan.FromMinutes(45), s.Remaining);
+    }
+
+    // ── 커스텀 세션 (단발 카운트다운 — 사이클 비파괴) ──────────────────────────
+
+    [Fact]
+    public void CustomSession_EndsToIdle_IgnoresAutoStart()
+    {
+        var s = NewService(autoStart: true);
+        s.SwitchKind(TimerKind.Custom);
+        s.Start();
+        CompleteSession(s, 30);
+        Assert.Equal(PomodoroState.Idle, s.State);             // AutoStart 무시
+        Assert.Equal(TimerKind.Custom, s.Kind);
+        Assert.Equal(TimeSpan.FromMinutes(30), s.Remaining);
+    }
+
+    [Fact]
+    public void CustomSession_DoesNotAffectFocusCount()
+    {
+        var s = NewService();
+        s.Start();
+        CompleteSession(s, 25);                   // 집중 1 완료 → 카운트 1
+        s.SwitchKind(TimerKind.Custom);
+        s.Start();
+        CompleteSession(s, 30);
+        Assert.Equal(1, s.CompletedFocusCount);   // 커스텀 완료는 카운트 불변
+    }
+
+    [Fact]
+    public void CustomSession_End_DoesNotMutateMode()
+    {
+        var s = NewService();
+        s.Start();
+        CompleteSession(s, 25);                   // Mode = ShortBreak
+        s.SwitchKind(TimerKind.Custom);
+        s.Start();
+        CompleteSession(s, 30);
+        Assert.Equal(PomodoroMode.ShortBreak, s.Mode);         // NextMode() 미호출
+    }
+
+    [Fact]
+    public void Reset_DuringCustom_RestoresCustomMinutes()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        s.SetCustomDuration(40);
+        s.Start();
+        Advance(TimeSpan.FromMinutes(10));
+        s.Reset();
+        Assert.Equal(PomodoroState.Idle, s.State);
+        Assert.Equal(TimeSpan.FromMinutes(40), s.Remaining);
+    }
+
+    [Fact]
+    public void CustomTick_JumpPastEnd_SingleSessionEnded_ToIdle()
+    {
+        var s = NewService(autoStart: true);
+        int events = 0;
+        s.SessionEnded += (_, _) => events++;
+        s.SwitchKind(TimerKind.Custom);
+        s.Start();
+        Advance(TimeSpan.FromHours(2));           // 슬립 — 경계 한참 초과
+        s.Tick();
+        Assert.Equal(1, events);
+        Assert.Equal(PomodoroState.Idle, s.State);
+
+        Advance(TimeSpan.FromHours(1));
+        s.Tick();                                 // Idle — 추가 이벤트 없음
+        Assert.Equal(1, events);
+    }
+
+    [Fact]
+    public void Skip_CustomKind_NoOp()
+    {
+        var s = NewService();
+        s.Start();
+        CompleteSession(s, 25);                   // Mode = ShortBreak 보존 상태
+        s.SwitchKind(TimerKind.Custom);
+        int changed = 0;
+        s.Changed += (_, _) => changed++;
+
+        s.Skip();                                 // Idle에서 — no-op, Changed 미발화
+        Assert.Equal(PomodoroMode.ShortBreak, s.Mode);
+        Assert.Equal(PomodoroState.Idle, s.State);
+        Assert.Equal(0, changed);
+
+        s.Start();
+        changed = 0;
+        s.Skip();                                 // Running에서도 no-op
+        Assert.Equal(PomodoroState.Running, s.State);
+        Assert.Equal(0, changed);
+    }
+
+    // ── 커스텀 표시 ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Custom_ModeLabel_IsTimer()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        Assert.Equal("타이머", s.ModeLabel);
+    }
+
+    [Fact]
+    public void Custom_TrayTooltip_Format()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        s.Start();                                // 30:00
+        Advance(TimeSpan.FromSeconds(86));        // 30:00 - 1:26 = 28:34
+        Assert.Equal("Noticker — 타이머 28:34", s.TrayTooltip);
+    }
+
+    [Fact]
+    public void TrayTooltip_PausedCustom_Within63Chars()
+    {
+        var s = NewService();
+        s.SwitchKind(TimerKind.Custom);
+        s.SetCustomDuration(60);                  // 최장 지속시간
+        s.Start();
+        s.Pause();
+        Assert.True(s.TrayTooltip.Length <= 63, $"'{s.TrayTooltip}' = {s.TrayTooltip.Length} chars");
+    }
+
+    // ── 이벤트 페이로드 (Kind + EndedMinutes) ─────────────────────────────────
+
+    [Fact]
+    public void SessionEnded_CarriesKindAndEndedMinutes()
+    {
+        // Pomodoro kind: 종료된 모드의 시작 시점 지속시간(분)
+        var s = NewService();
+        SessionEndedEventArgs? args = null;
+        s.SessionEnded += (_, e) => args = e;
+        s.Start();
+        CompleteSession(s, 25);
+        Assert.NotNull(args);
+        Assert.Equal(TimerKind.Pomodoro, args!.Kind);
+        Assert.Equal(25, args.EndedMinutes);
+
+        // Custom kind: CustomMinutes 스냅샷
+        s.SwitchKind(TimerKind.Custom);
+        s.SetCustomDuration(40);
+        s.Start();
+        CompleteSession(s, 40);
+        Assert.Equal(TimerKind.Custom, args!.Kind);
+        Assert.Equal(40, args.EndedMinutes);
+    }
+
+    // ── 다이얼 표시 (60분 시계면) ──────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(25, 0, false, false, 0.4167, 0)]  // Idle 25분 → 25/60
+    [InlineData(60, 0, false, false, 1.0, 0)]     // 정각 60:00 → 꽉 찬 원, 오버플로 없음
+    [InlineData(90, 1, true, false, 1.0, 30)]     // 89:59 → 꽉 찬 원 + "+30분" (ceil)
+    [InlineData(25, 1800, true, false, 0.0, 0)]   // 잔여 0 → 빈 웨지
+    [InlineData(25, 600, true, true, 0.25, 0)]    // Paused 15분 → _pausedRemaining 기준
+    public void WedgeFraction_60MinFace(
+        int focus, int advanceSeconds, bool start, bool pause,
+        double expectedFraction, int expectedOverflow)
+    {
+        var s = NewService(focus: focus);
+        if (start) s.Start();
+        Advance(TimeSpan.FromSeconds(advanceSeconds));
+        if (pause) s.Pause();
+        Assert.Equal(expectedFraction, s.WedgeFraction, 4);
+        Assert.Equal(expectedOverflow, s.OverflowMinutes);
+    }
 }

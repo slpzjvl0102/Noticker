@@ -185,4 +185,29 @@ public class SettingsRepositoryTests : IDisposable
         Assert.Equal(60, AppSettings.Instance.PomodoroShortBreakMinutes);
         Assert.Equal(1, AppSettings.Instance.PomodoroLongBreakInterval);
     }
+
+    [Fact]
+    public void CustomMin_RoundTrip()
+    {
+        _repo.Set("pomodoro_custom_min", "37");
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.Equal(37, AppSettings.Instance.PomodoroCustomMinutes);
+    }
+
+    [Theory]
+    [InlineData("abc", 30)]  // → 기본 30
+    [InlineData("0", 1)]     // → min 1
+    [InlineData("999", 60)]  // → max 60
+    [InlineData(null, 30)]   // 미저장 → 기본 30
+    public void CustomMin_CorruptedOrOutOfRange_ParseClamped(string? raw, int expected)
+    {
+        // singleton 오염 방지: 먼저 잡값을 넣고 LoadInto가 덮는지 확인
+        AppSettings.Instance.PomodoroCustomMinutes = 99;
+        if (raw is not null)
+            _repo.Set("pomodoro_custom_min", raw);
+
+        _repo.LoadInto(AppSettings.Instance);
+
+        Assert.Equal(expected, AppSettings.Instance.PomodoroCustomMinutes);
+    }
 }

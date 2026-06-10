@@ -41,11 +41,13 @@ public class AppSettings : INotifyPropertyChanged
     public const int PomodoroShortBreakDefault = 5, PomodoroBreakMin = 1, PomodoroBreakMax = 60;
     public const int PomodoroLongBreakDefault = 15;
     public const int PomodoroIntervalDefault = 4, PomodoroIntervalMin = 1, PomodoroIntervalMax = 12;
+    public const int PomodoroCustomDefault = 30; // 범위는 PomodoroBreakMin/Max (1-60) 공유
 
     public int PomodoroFocusMinutes { get; set; } = PomodoroFocusDefault;
     public int PomodoroShortBreakMinutes { get; set; } = PomodoroShortBreakDefault;
     public int PomodoroLongBreakMinutes { get; set; } = PomodoroLongBreakDefault;
     public int PomodoroLongBreakInterval { get; set; } = PomodoroIntervalDefault;
+    public int PomodoroCustomMinutes { get; set; } = PomodoroCustomDefault;
     public bool PomodoroAutoStart { get; set; }
     public bool PomodoroSound { get; set; } = true;
     public bool PomodoroAlwaysOnTop { get; set; } = true;
