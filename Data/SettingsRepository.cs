@@ -70,6 +70,7 @@ public class SettingsRepository
 
         settings.TargetDbId = Get("target_db_id");
         settings.NotionBotUserId = Get("notion_bot_user_id");
+        settings.NotionDbTitle = Get("notion_db_title");
         settings.CategoryPropertyName = Get("category_property_name") ?? "Category";
         settings.ColorSwapped = Get("color_swapped") == "true";
         settings.AutostartEnabled = Get("autostart_enabled") == "true";

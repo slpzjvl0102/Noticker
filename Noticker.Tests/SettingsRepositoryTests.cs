@@ -81,6 +81,23 @@ public class SettingsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void LoadInto_NotionDbTitle_Loaded()
+    {
+        _repo.Set("notion_db_title", "업무 노트");
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.Equal("업무 노트", AppSettings.Instance.NotionDbTitle);
+    }
+
+    [Fact]
+    public void LoadInto_MissingNotionDbTitle_Null()
+    {
+        // singleton 오염 방지: 먼저 잡값을 넣고 LoadInto가 null로 덮는지 확인
+        AppSettings.Instance.NotionDbTitle = "stale";
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.Null(AppSettings.Instance.NotionDbTitle);
+    }
+
+    [Fact]
     public void LoadInto_CategoryPropertyName_DefaultsToCategory()
     {
         // fresh DB — no category_property_name stored
