@@ -452,7 +452,13 @@ public partial class App : System.Windows.Application
     {
         var existing = Windows.OfType<SettingsWindow>().FirstOrDefault();
         if (existing != null) { existing.Activate(); return; }
-        new SettingsWindow(SettingsRepo!, _notionClient!, StickerRepo!).Show();
+
+        var win = new SettingsWindow(SettingsRepo!, _notionClient!, StickerRepo!);
+        // 모니터 우측 배치 — 온보딩 직후 중앙에 생기는 새 스티커와 겹치지 않도록
+        var wa = GetActiveScreen().WorkingArea;
+        win.Left = Math.Max(wa.Left, wa.Right - win.Width - 16);
+        win.Top = wa.Top + Math.Max(0, (wa.Height - win.Height) / 2);
+        win.Show();
     }
 
     public void OpenOnboarding()
