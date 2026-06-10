@@ -462,6 +462,12 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             // Clear all local Margin values so the Document.Resources style (Margin=0) takes effect.
             NormalizeDocumentMargins();
 
+            // RTF에는 색/글꼴/크기가 run 단위로 박혀 BodyBox의 테마 색·스티커 폰트 바인딩을
+            // 이긴다 — pull/가져오기로 합성된 RTF(기본 검정/기본 글꼴)와 테마 전환 후의
+            // 기존 RTF 모두 같은 문제. 앱에는 run 단위 색/크기/글꼴 UI가 없으므로
+            // (서식은 Bold/Underline뿐) 전부 걷어내고 컨트롤에서 상속받게 한다
+            NormalizeInheritedFormatting();
+
             if (!string.IsNullOrEmpty(_sticker.FontFamily))
             {
                 FontFamilyBox.SelectedValue = _sticker.FontFamily;
@@ -491,6 +497,35 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
                         inner.ClearValue(Block.MarginProperty);
                 }
             }
+        }
+    }
+
+    // 색/글꼴/크기의 명시값 제거 — Bold(FontWeight)/Underline(TextDecorations)은 보존
+    private void NormalizeInheritedFormatting()
+    {
+        foreach (var block in BodyBox.Document.Blocks)
+            NormalizeElement(block);
+    }
+
+    private static void NormalizeElement(TextElement el)
+    {
+        el.ClearValue(TextElement.ForegroundProperty);
+        el.ClearValue(TextElement.FontFamilyProperty);
+        el.ClearValue(TextElement.FontSizeProperty);
+
+        switch (el)
+        {
+            case Paragraph p:
+                foreach (var inline in p.Inlines) NormalizeElement(inline);
+                break;
+            case Span s:
+                foreach (var inline in s.Inlines) NormalizeElement(inline);
+                break;
+            case System.Windows.Documents.List list:
+                foreach (var item in list.ListItems)
+                    foreach (var inner in item.Blocks)
+                        NormalizeElement(inner);
+                break;
         }
     }
 
