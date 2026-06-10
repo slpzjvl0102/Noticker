@@ -1,13 +1,13 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using Noticker.Data;
 using Noticker.Models;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
 using Button = System.Windows.Controls.Button;
-using ListViewItem = System.Windows.Controls.ListViewItem;
 using MessageBox = System.Windows.MessageBox;
 
 namespace Noticker.Windows;
@@ -18,11 +18,39 @@ public partial class NoteListWindow : Window
     private List<NoteItem> _allItems = [];
     private bool _needsRefresh = false;
 
-    private static readonly SolidColorBrush _dark = new(Color.FromRgb(0x33, 0x33, 0x33));
-    private static readonly SolidColorBrush _darkBorder = new(Color.FromRgb(0x50, 0x50, 0x50));
-    private static readonly SolidColorBrush _darkRow = new(Color.FromRgb(0x44, 0x44, 0x44));
-    private static readonly SolidColorBrush _mutedDark = new(Color.FromRgb(0xAA, 0xAA, 0xAA));
-    private static readonly SolidColorBrush _mutedLight = new(Color.FromRgb(0xAA, 0xAA, 0xAA));
+    // 카드 색은 NoteItem에 브러시로 박아 바인딩으로 그린다 — 테마 전환 시 Refresh()로
+    // 아이템을 재생성하므로 디스패처 후처리(구 ApplyRowColors)가 필요 없다.
+    private static readonly ThemePalette _lightPalette = new(
+        WinBg: new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xFA)),
+        CardBg: Brushes.White,
+        CardBorder: new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xEC)),
+        HoverBorder: new SolidColorBrush(Color.FromRgb(0xD5, 0xD5, 0xD5)),
+        TitleFg: new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A)),
+        MutedFg: new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99)),
+        BadgeBg: new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0)),
+        BadgeFg: new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
+        LineBorder: new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)));
+
+    private static readonly ThemePalette _darkPalette = new(
+        WinBg: new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+        CardBg: new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x3C)),
+        CardBorder: new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50)),
+        HoverBorder: new SolidColorBrush(Color.FromRgb(0x6A, 0x6A, 0x6A)),
+        TitleFg: Brushes.White,
+        MutedFg: new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
+        BadgeBg: new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x4A)),
+        BadgeFg: new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
+        LineBorder: new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50)));
+
+    private static readonly DropShadowEffect _hoverShadow = new()
+    {
+        BlurRadius = 4,
+        ShadowDepth = 1,
+        Opacity = 0.12
+    };
+
+    private static ThemePalette Palette =>
+        AppSettings.Instance.ColorSwapped ? _darkPalette : _lightPalette;
 
     public NoteListWindow(StickerRepository repo)
     {
@@ -39,44 +67,31 @@ public partial class NoteListWindow : Window
 
     private void ApplyTheme()
     {
-        bool dark = AppSettings.Instance.ColorSwapped;
+        var p = Palette;
 
-        var bg = dark ? _dark : Brushes.White;
-        var fg = dark ? Brushes.White : Brushes.Black;
-        var borderColor = dark ? _darkBorder : new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD));
-        var rowBorderColor = dark ? _darkRow : new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
-        var mutedFg = dark ? _mutedDark : _mutedLight;
+        RootPanel.Background = p.WinBg;
+        NoteList.Background = p.WinBg;
+        NoteList.Foreground = p.TitleFg;
 
-        RootPanel.Background = bg;
-        NoteList.Background = bg;
-        NoteList.Foreground = fg;
+        SearchBorder.BorderBrush = p.LineBorder;
+        ImportBorder.BorderBrush = p.LineBorder;
+        SearchBox.Foreground = p.TitleFg;
+        SearchBox.BorderBrush = p.LineBorder;
+        SearchBox.CaretBrush = p.TitleFg;
+        SearchPlaceholder.Foreground = p.MutedFg;
+        EmptyLabel.Foreground = p.MutedFg;
+        ImportButton.Foreground = p.MutedFg;
+        ImportButton.BorderBrush = p.CardBorder;
 
-        SearchBorder.BorderBrush = borderColor;
-        ImportBorder.BorderBrush = borderColor;
-        SearchBox.Background = dark ? new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)) : Brushes.White;
-        SearchBox.Foreground = fg;
-        SearchBox.BorderBrush = borderColor;
-        SearchBox.CaretBrush = fg;
-        SearchPlaceholder.Foreground = mutedFg;
-        EmptyLabel.Foreground = mutedFg;
-
-        // Re-apply row colors via item template tag
-        _rowBorderColor = rowBorderColor;
-        _textFg = fg;
-        _mutedFg = mutedFg;
-
-        // Refresh displayed items to pick up new colors
-        if (_allItems.Count > 0) ApplyFilter();
+        // 카드 브러시는 아이템에 박혀 있어 재생성 필요
+        if (_allItems.Count > 0) Refresh();
     }
-
-    private Brush _rowBorderColor = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
-    private Brush _textFg = Brushes.Black;
-    private Brush _mutedFg = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
 
     private void Refresh()
     {
+        var p = Palette;
         _allItems = _repo.GetAllSummary()
-            .Select(t => NoteItem.From(t.Id, t.Title, t.Body, t.UpdatedAt, t.IsHidden))
+            .Select(t => NoteItem.From(t.Id, t.Title, t.Body, t.UpdatedAt, t.IsHidden, p))
             .ToList();
         _needsRefresh = false;
         ApplyFilter();
@@ -104,9 +119,6 @@ public partial class NoteListWindow : Window
 
         NoteList.ItemsSource = filtered;
 
-        // Apply row colors after binding
-        Dispatcher.InvokeAsync(() => ApplyRowColors(), System.Windows.Threading.DispatcherPriority.Loaded);
-
         if (filtered.Count == 0)
         {
             EmptyLabel.Text = q.Length > 0
@@ -120,28 +132,24 @@ public partial class NoteListWindow : Window
         }
     }
 
-    private void ApplyRowColors()
+    // hover 비주얼(테두리/그림자/✕)은 코드로 — DataTemplate 트리거의 Setter에는
+    // Binding을 쓸 수 없어 테마별 브러시를 줄 수 없다.
+    private void Card_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        bool dark = AppSettings.Instance.ColorSwapped;
-        foreach (var item in NoteList.Items)
-        {
-            var container = NoteList.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
-            if (container == null) continue;
+        if (sender is not Border card || card.DataContext is not NoteItem item) return;
+        card.BorderBrush = item.HoverBorderBrush;
+        card.Effect = _hoverShadow;
+        if (FindVisualChild<Button>(card, "DeleteX") is { } del)
+            del.Visibility = Visibility.Visible;
+    }
 
-            var rowBorder = FindVisualChild<Border>(container, "RowBorder");
-            if (rowBorder != null)
-            {
-                rowBorder.BorderBrush = _rowBorderColor;
-            }
-
-            // Title label (주 내용)
-            var titleLabel = FindVisualChild<TextBlock>(container, "TitleLabel");
-            if (titleLabel != null) titleLabel.Foreground = _textFg;
-
-            // Date label
-            var dateLabel = FindVisualChild<TextBlock>(container, "DateLabel");
-            if (dateLabel != null) dateLabel.Foreground = _mutedFg;
-        }
+    private void Card_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (sender is not Border card || card.DataContext is not NoteItem item) return;
+        card.BorderBrush = item.CardBorderBrush;
+        card.Effect = null;
+        if (FindVisualChild<Button>(card, "DeleteX") is { } del)
+            del.Visibility = Visibility.Collapsed;
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement
@@ -191,15 +199,26 @@ public partial class NoteListWindow : Window
         }
     }
 
-    private record NoteItem(string Id, string Title, string DateLabel, string IsHiddenBadge)
+    private record ThemePalette(
+        Brush WinBg, Brush CardBg, Brush CardBorder, Brush HoverBorder,
+        Brush TitleFg, Brush MutedFg, Brush BadgeBg, Brush BadgeFg, Brush LineBorder);
+
+    private record NoteItem(
+        string Id, string Title, string DateLabel, string IsHiddenBadge,
+        Brush CardBg, Brush CardBorderBrush, Brush HoverBorderBrush,
+        Brush TitleFg, Brush MutedFg, Brush BadgeBg, Brush BadgeFg)
     {
-        public static NoteItem From(string id, string title, string body, string updatedAt, bool isHidden)
+        public static NoteItem From(string id, string title, string body, string updatedAt,
+            bool isHidden, ThemePalette p)
         {
             var displayTitle = !string.IsNullOrWhiteSpace(title) ? title : "(제목 없음)";
             var dateLabel = DateTime.TryParse(updatedAt, out var dt)
                 ? dt.ToLocalTime().ToString("yyyy년 M월 d일")
                 : "";
-            return new NoteItem(id, displayTitle, dateLabel, isHidden ? "Visible" : "Collapsed");
+            return new NoteItem(id, displayTitle, dateLabel,
+                isHidden ? "Visible" : "Collapsed",
+                p.CardBg, p.CardBorder, p.HoverBorder,
+                p.TitleFg, p.MutedFg, p.BadgeBg, p.BadgeFg);
         }
     }
 }

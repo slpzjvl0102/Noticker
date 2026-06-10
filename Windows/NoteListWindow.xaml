@@ -7,14 +7,14 @@
         ShowInTaskbar="False"
         ResizeMode="CanResize">
     <DockPanel x:Name="RootPanel">
-        <!-- 검색 -->
-        <Border x:Name="SearchBorder" DockPanel.Dock="Top" Padding="8,6"
+        <!-- 검색 — 밑줄(line-style) -->
+        <Border x:Name="SearchBorder" DockPanel.Dock="Top" Padding="12,8"
                 BorderThickness="0,0,0,1">
             <Grid>
                 <TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged"
-                         Padding="4,4" BorderThickness="1"/>
+                         Padding="2,4" BorderThickness="0,0,0,1" Background="Transparent"/>
                 <TextBlock x:Name="SearchPlaceholder" Text="검색..."
-                           Padding="6,4" IsHitTestVisible="False"
+                           Padding="2,4" IsHitTestVisible="False"
                            VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -30,13 +30,29 @@
             </Grid>
         </Border>
 
-        <!-- Notion 가져오기 진입 -->
+        <!-- Notion 가져오기 진입 — 조용한 외곽선 버튼 -->
         <Border x:Name="ImportBorder" DockPanel.Dock="Top" Padding="8,6"
                 BorderThickness="0,0,0,1">
-            <Button x:Name="ImportButton" Content="Notion에서 가져오기"
+            <Button x:Name="ImportButton" Content="↓ Notion에서 가져오기"
                     Click="ImportButton_Click"
-                    Padding="6,3" HorizontalAlignment="Stretch"
-                    Cursor="Hand"/>
+                    Padding="6,4" HorizontalAlignment="Stretch"
+                    FontSize="11" Cursor="Hand">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="Transparent"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
         </Border>
 
         <!-- 빈 상태 메시지 -->
@@ -49,10 +65,11 @@
                    Margin="24,0"
                    DockPanel.Dock="Bottom"/>
 
-        <!-- 노트 목록 -->
+        <!-- 노트 목록 — 카드형 -->
         <ListView x:Name="NoteList"
                   SelectionChanged="NoteList_SelectionChanged"
                   BorderThickness="0"
+                  Padding="0,4"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
@@ -63,22 +80,9 @@
                     <Setter Property="Background" Value="Transparent"/>
                     <Setter Property="Template">
                         <Setter.Value>
+                            <!-- 시스템 하이라이트/선택 비주얼 제거 — 카드가 hover를 직접 그린다 -->
                             <ControlTemplate TargetType="ListViewItem">
-                                <Border x:Name="ItemBorder" Background="Transparent">
-                                    <ContentPresenter/>
-                                    <VisualStateManager.VisualStateGroups>
-                                        <VisualStateGroup x:Name="CommonStates">
-                                            <VisualState x:Name="Normal"/>
-                                            <VisualState x:Name="MouseOver">
-                                                <Storyboard>
-                                                    <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ItemBorder" Storyboard.TargetProperty="Background">
-                                                        <DiscreteObjectKeyFrame KeyTime="0" Value="{x:Static SystemColors.HighlightBrush}"/>
-                                                    </ObjectAnimationUsingKeyFrames>
-                                                </Storyboard>
-                                            </VisualState>
-                                        </VisualStateGroup>
-                                    </VisualStateManager.VisualStateGroups>
-                                </Border>
+                                <ContentPresenter/>
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
@@ -86,33 +90,49 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Border x:Name="RowBorder" Padding="12,8" BorderThickness="0,0,0,1">
+                    <Border x:Name="CardBorder" Margin="8,3" Padding="11,9"
+                            CornerRadius="5" BorderThickness="1"
+                            Background="{Binding CardBg}"
+                            BorderBrush="{Binding CardBorderBrush}"
+                            MouseEnter="Card_MouseEnter" MouseLeave="Card_MouseLeave">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <!-- 제목 (주 내용) -->
-                                <TextBlock x:Name="TitleLabel"
-                                           Text="{Binding Title}"
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding Title}"
                                            TextTrimming="CharacterEllipsis"
-                                           FontSize="12"/>
-                                <!-- 날짜 + 숨김 배지 (보조) -->
-                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                    <TextBlock x:Name="DateLabel"
-                                               Text="{Binding DateLabel}"
-                                               FontSize="10"/>
-                                    <TextBlock Text=" · 숨김" FontSize="10"
-                                               Visibility="{Binding IsHiddenBadge}"/>
-                                </StackPanel>
+                                           FontSize="12"
+                                           Foreground="{Binding TitleFg}"/>
+                                <TextBlock Text="{Binding DateLabel}"
+                                           FontSize="10" Margin="0,3,0,0"
+                                           Foreground="{Binding MutedFg}"/>
                             </StackPanel>
-                            <Button Grid.Column="1" Content="삭제"
-                                    Tag="{Binding Id}"
-                                    Click="DeleteButton_Click"
-                                    Padding="6,2" Margin="8,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Cursor="Hand"/>
+                            <!-- 숨김 알약 배지 -->
+                            <Border Grid.Column="1" Visibility="{Binding IsHiddenBadge}"
+                                    Background="{Binding BadgeBg}" CornerRadius="8"
+                                    Padding="7,1" Margin="5,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="숨김" FontSize="9"
+                                           Foreground="{Binding BadgeFg}"/>
+                            </Border>
+                            <!-- hover한 카드에만 보이는 삭제 ✕ -->
+                            <Button x:Name="DeleteX" Grid.Column="2" Content="✕"
+                                    Tag="{Binding Id}" Click="DeleteButton_Click"
+                                    Visibility="Collapsed"
+                                    FontSize="12" Padding="4,0" Margin="8,0,0,0"
+                                    VerticalAlignment="Center" Cursor="Hand"
+                                    Foreground="{Binding MutedFg}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="Transparent"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </Grid>
                     </Border>
                 </DataTemplate>
