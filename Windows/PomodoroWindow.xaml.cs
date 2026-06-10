@@ -23,8 +23,7 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
     private bool _loading = true;
     private bool _hideNoticeShown;                     // 앱 실행당 1회 안내
     private (int Completed, int Interval, bool Swapped) _dotsKey = (-1, -1, false);
-    private string? _wedgeColorKey;
-    private Brush _wedgeBrush = MakeFrozenBrush(NotionColorPalette.FallbackWedge);
+    private string? _wedgeColorKey;                    // null = 테마 바색 (트레이/무카테고리)
     private readonly System.Windows.Threading.DispatcherTimer _persistDebounce;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -80,8 +79,11 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
     }
 
     // ── 웨지 색 (스티커 카테고리 → 팔레트, 세션 중 잠금은 App의 Idle 가드가 보장) ──
+    // 키 null = 스티커 바색(흑/백)과 동일 — 트레이/무카테고리 오픈은 테마 모노톤 웨지
 
-    public Brush WedgeBrush => _wedgeBrush;
+    public Brush WedgeBrush => _wedgeColorKey is null
+        ? (Swapped ? Brushes.White : _darkGray)
+        : MakeFrozenBrush(NotionColorPalette.Wedge(_wedgeColorKey));
 
     // 휴식 아웃라인 웨지 stroke — BodyForeground 0.55 (보조 텍스트 토큰과 동일 위계)
     public Brush WedgeStrokeBrush
@@ -97,7 +99,6 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
     {
         if (key == _wedgeColorKey) return;
         _wedgeColorKey = key;
-        _wedgeBrush = MakeFrozenBrush(NotionColorPalette.Wedge(key));
         Notify(nameof(WedgeBrush));
     }
 
@@ -362,6 +363,7 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
             Notify(nameof(BodyBackground));
             Notify(nameof(BodyForeground));
             Notify(nameof(WedgeStrokeBrush));
+            Notify(nameof(WedgeBrush));                // 모노톤 웨지(키 null)는 테마 따라 반전
             _dotsKey = (-1, -1, false);                // 테마 전환 시 도트 브러시 재생성 강제
             RebuildDots();
         }

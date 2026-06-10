@@ -274,8 +274,8 @@ public partial class App : System.Windows.Application
     public void OpenPomodoro(string? colorKey = null)
     {
         if (_pomodoro is null) return;
-        // 색 잠금: Idle일 때만 키 갱신. 트레이/무카테고리(null)는 마지막 색 유지
-        if (colorKey is not null && _pomodoro.State == PomodoroState.Idle)
+        // 색 잠금: Idle일 때만 키 갱신. null(트레이/무카테고리) = 테마 바색(흑/백) 웨지
+        if (_pomodoro.State == PomodoroState.Idle)
             _pomodoroWedgeColorKey = colorKey;
         _pomodoroWindow ??= new PomodoroWindow(_pomodoro, SettingsRepo!);
         // ??= 캐시 창에는 매 호출 push — 생성자 전달만으론 색이 첫 오픈에 고정됨
