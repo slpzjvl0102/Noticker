@@ -77,6 +77,8 @@ public partial class OnboardingWindow : Window
         NextButton.Visibility = Visibility.Collapsed;
         BackButton.Visibility = Visibility.Visible;
         FinishButton.Visibility = Visibility.Visible;
+        NextButton.IsDefault = false;     // 2단계에서 Enter가 [시작하기]로 가도록
+        FinishButton.IsDefault = true;
         await LoadDatabasesAsync();
     }
 
@@ -88,6 +90,8 @@ public partial class OnboardingWindow : Window
         BackButton.Visibility = Visibility.Collapsed;
         FinishButton.Visibility = Visibility.Collapsed;
         NextButton.Visibility = Visibility.Visible;
+        FinishButton.IsDefault = false;
+        NextButton.IsDefault = true;
     }
 
     private async void RefreshDbButton_Click(object sender, RoutedEventArgs e) =>
@@ -177,6 +181,7 @@ public partial class OnboardingWindow : Window
     {
         if (DbCombo.SelectedIndex < 0) return;
         FinishButton.IsEnabled = false;
+        BackButton.IsEnabled = false;   // 저장 후 await 중 1단계 복귀 방지 — 창은 곧 닫힌다
 
         var app = AppSettings.Instance;
         var (dbId, dbTitle) = _databases[DbCombo.SelectedIndex];
@@ -204,6 +209,17 @@ public partial class OnboardingWindow : Window
         {
             try { await App.Current.RefreshCategoryOptionsAsync(); }
             catch { /* 옵션 갱신 실패는 설정 창 [옵션 새로고침]으로 복구 가능 — 온보딩은 막지 않는다 */ }
+        }
+        else
+        {
+            // 카테고리 없음 선택 — 이전 DB의 옵션/색이 남아 스티커 드롭다운과 push를
+            // 오염시키지 않도록 캐시를 비운다
+            app.CategoryOptions = [];
+            app.CategoryColors = [];
+            _settings.SaveCategoryOptions([]);
+            _settings.SaveCategoryColors(new Dictionary<string, string>());
+            foreach (var win in System.Windows.Application.Current.Windows.OfType<StickerWindow>())
+                win.RefreshCategoryOptions();
         }
 
         Close();

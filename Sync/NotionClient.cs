@@ -124,25 +124,6 @@ public class NotionClient
         return options;
     }
 
-    // Tests DB connectivity. Returns null on success, error message on failure.
-    public async Task<string?> TestConnectionAsync(CancellationToken ct)
-    {
-        SetAuth();
-        try
-        {
-            await GetAsync($"/databases/{_settings.TargetDbId}", ct);
-            return null;
-        }
-        catch (NotionUnauthorizedException)
-        {
-            return "Token이 유효하지 않습니다 (401).";
-        }
-        catch (Exception ex)
-        {
-            return ex.Message;
-        }
-    }
-
     // Fetches a page's (last_edited_time, last_edited_by.id) pair for overwrite protection
     // and conflict detection. Returns null if the page no longer exists (404).
     public async Task<(string LastEditedTime, string LastEditedById)?> GetPageMetaAsync(string pageId, CancellationToken ct)
