@@ -323,6 +323,25 @@ public partial class App : System.Windows.Application
         _pomodoro.AutoStart = s.PomodoroAutoStart;
     }
 
+    // 카테고리 옵션/색 새로고침 — SettingsWindow와 OnboardingWindow가 공유 (로직 한 곳).
+    // 실패 시 예외를 그대로 던진다 — 호출자가 각자 상태 표시를 책임진다.
+    public async Task<int> RefreshCategoryOptionsAsync()
+    {
+        var options = await _notionClient!.FetchCategoryOptionsAsync(_cts.Token);
+        var names = options.Select(o => o.Name).ToList();
+        var colors = options.ToDictionary(o => o.Name, o => o.Color);
+
+        AppSettings.Instance.CategoryOptions = names;
+        AppSettings.Instance.CategoryColors = colors;
+        SettingsRepo!.SaveCategoryOptions(names);
+        SettingsRepo!.SaveCategoryColors(colors);
+
+        foreach (var win in Windows.OfType<StickerWindow>())
+            win.RefreshCategoryOptions();
+
+        return options.Count;
+    }
+
     public void OpenPomodoro(string? colorKey = null)
     {
         if (_pomodoro is null) return;

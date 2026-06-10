@@ -83,19 +83,8 @@ public partial class SettingsWindow : Window
 
         try
         {
-            var options = await _client.FetchCategoryOptionsAsync(default);
-            var names = options.Select(o => o.Name).ToList();
-            var colors = options.ToDictionary(o => o.Name, o => o.Color);
-
-            AppSettings.Instance.CategoryOptions = names;
-            AppSettings.Instance.CategoryColors = colors;
-            _settings.SaveCategoryOptions(names);
-            _settings.SaveCategoryColors(colors);
-            CatStatusText.Text = $"{options.Count}개 옵션 새로고침 완료";
-
-            // Refresh all open sticker windows
-            foreach (var win in App.Current.Windows.OfType<StickerWindow>())
-                win.RefreshCategoryOptions();
+            var count = await App.Current.RefreshCategoryOptionsAsync();
+            CatStatusText.Text = $"{count}개 옵션 새로고침 완료";
         }
         catch (Exception ex)
         {
