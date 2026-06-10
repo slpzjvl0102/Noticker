@@ -270,7 +270,12 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     private void PomodoroButton_Click(object sender, RoutedEventArgs e)
     {
-        App.Current.OpenPomodoro();
+        // 웨지 색 = 이 스티커의 카테고리 색 (노션 색 이름). 카테고리/색 없으면 null → 마지막 색 유지
+        string? colorKey = null;
+        if (_sticker.Category is string cat &&
+            AppSettings.Instance.CategoryColors.TryGetValue(cat, out var notionColor))
+            colorKey = notionColor;
+        App.Current.OpenPomodoro(colorKey);
     }
 
     private void BodyBox_PreviewKeyDown(object sender, KeyEventArgs e)

@@ -23,6 +23,9 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
     private bool _loading = true;
     private bool _hideNoticeShown;                     // 앱 실행당 1회 안내
     private (int Completed, int Interval, bool Swapped) _dotsKey = (-1, -1, false);
+    private string? _wedgeColorKey;
+    private Brush _wedgeBrush = MakeFrozenBrush(NotionColorPalette.FallbackWedge);
+    private readonly System.Windows.Threading.DispatcherTimer _persistDebounce;
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify(string name) =>
@@ -39,6 +42,17 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
         AppSettings.Instance.PropertyChanged += OnAppSettingsChanged;
         _service.Changed += OnServiceChanged;
         _service.SessionEnded += OnSessionEnded;
+
+        Dial.SetMinutesRequested += (_, m) => _service.SetCustomDuration(m);
+        Dial.WheelDeltaRequested += (_, d) => ApplyCustomDelta(d);
+        Dial.DragCompleted += (_, _) => PersistCustomMinutes();
+
+        // 휠/키보드 연타가 노치마다 DB를 치지 않도록 디바운스 (SavePosition 어법)
+        _persistDebounce = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(600)
+        };
+        _persistDebounce.Tick += (_, _) => { _persistDebounce.Stop(); PersistCustomMinutes(); };
 
         Topmost = AppSettings.Instance.PomodoroAlwaysOnTop;
         PinButton.IsChecked = Topmost;
@@ -58,10 +72,51 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
     public Brush BodyBackground => Swapped ? _darkGray : Brushes.White;
     public Brush BodyForeground => Swapped ? Brushes.White : Brushes.Black;
 
+    private static SolidColorBrush MakeFrozenBrush(Color c)
+    {
+        var b = new SolidColorBrush(c);
+        b.Freeze();
+        return b;
+    }
+
+    // ── 웨지 색 (스티커 카테고리 → 팔레트, 세션 중 잠금은 App의 Idle 가드가 보장) ──
+
+    public Brush WedgeBrush => _wedgeBrush;
+
+    // 휴식 아웃라인 웨지 stroke — BodyForeground 0.55 (보조 텍스트 토큰과 동일 위계)
+    public Brush WedgeStrokeBrush
+    {
+        get
+        {
+            var c = ((SolidColorBrush)BodyForeground).Color;
+            return MakeFrozenBrush(Color.FromArgb(0x8C, c.R, c.G, c.B)); // 0.55 ≈ 0x8C
+        }
+    }
+
+    public void SetWedgeColorKey(string? key)
+    {
+        if (key == _wedgeColorKey) return;
+        _wedgeColorKey = key;
+        _wedgeBrush = MakeFrozenBrush(NotionColorPalette.Wedge(key));
+        Notify(nameof(WedgeBrush));
+    }
+
+    // ── 다이얼 바인딩 ──────────────────────────────────────────────────────────
+
+    public double DialFraction => _service.WedgeFraction;
+    public bool DialOutlineOnly =>
+        _service.Kind == TimerKind.Pomodoro && _service.Mode != PomodoroMode.Focus;
+    public bool DialSettable =>
+        _service.Kind == TimerKind.Custom && _service.State == PomodoroState.Idle;
+    public double DialWedgeOpacity =>
+        _service.State == PomodoroState.Paused && !DialOutlineOnly ? 0.45 : 1.0;
+
     // ── 표시 바인딩 ────────────────────────────────────────────────────────────
 
     public string TimeText => PomodoroService.FormatRemaining(_service.Remaining);
-    public string ModeText => _service.ModeLabel;
+    public string ModeText => _service.State == PomodoroState.Paused
+        ? $"{_service.ModeLabel} · 일시정지"
+        : _service.ModeLabel;
     public double TimeOpacity => _service.State == PomodoroState.Paused ? 0.45 : 1.0;
     public bool ResetEnabled => _service.State != PomodoroState.Idle;
     public Visibility PlayGlyphVisibility =>
@@ -71,6 +126,13 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
     public string StartPauseTooltip =>
         _service.State == PomodoroState.Running ? "일시정지 (Space)" : "시작 (Space)";
     public string TimeAutomationName => $"{_service.ModeLabel} 남은 시간 {TimeText}";
+    public Visibility DotsVisibility =>
+        _service.Kind == TimerKind.Pomodoro ? Visibility.Visible : Visibility.Hidden;
+    public Visibility SkipVisibility =>
+        _service.Kind == TimerKind.Pomodoro ? Visibility.Visible : Visibility.Hidden;
+    public string OverflowText => $"+{_service.OverflowMinutes}분";
+    public Visibility OverflowVisibility =>
+        _service.OverflowMinutes > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnServiceChanged(object? sender, EventArgs e) => RefreshAll();
 
@@ -86,7 +148,23 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
         Notify(nameof(PauseGlyphVisibility));
         Notify(nameof(StartPauseTooltip));
         Notify(nameof(TimeAutomationName));
+        Notify(nameof(DialFraction));
+        Notify(nameof(DialOutlineOnly));
+        Notify(nameof(DialSettable));
+        Notify(nameof(DialWedgeOpacity));
+        Notify(nameof(DotsVisibility));
+        Notify(nameof(SkipVisibility));
+        Notify(nameof(OverflowText));
+        Notify(nameof(OverflowVisibility));
+        SyncKindToggle();
         RebuildDots();
+    }
+
+    private void SyncKindToggle()
+    {
+        // one-way from service — ToggleButton 자가 토글로 인한 상태 desync 방지
+        KindToggle.IsChecked = _service.Kind == TimerKind.Custom;
+        KindToggle.IsEnabled = _service.State == PomodoroState.Idle;
     }
 
     private void RebuildDots()
@@ -97,7 +175,7 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
         if (key == _dotsKey) return;                   // 매초 재생성 방지
         _dotsKey = key;
 
-        // 간격 1-6 → 8px 도트/6px 간격, 7-12 → 6px/4px (180px 폭 내 수용)
+        // 간격 1-6 → 8px 도트/6px 간격, 7-12 → 6px/4px
         double size = interval <= 6 ? 8 : 6;
         double gap = interval <= 6 ? 6 : 4;
 
@@ -144,6 +222,27 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
 
     private void Skip_Click(object sender, RoutedEventArgs e) => _service.Skip();
 
+    private void KindToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var target = _service.Kind == TimerKind.Pomodoro ? TimerKind.Custom : TimerKind.Pomodoro;
+        _service.SwitchKind(target);                   // Idle 가드 — no-op일 수 있음
+        SyncKindToggle();                              // 자가 토글 복원 (실제 상태 기준)
+    }
+
+    private void ApplyCustomDelta(int delta)
+    {
+        _service.SetCustomDuration(DialMath.ClampMinutes(_service.CustomMinutes + delta));
+        _persistDebounce.Stop();
+        _persistDebounce.Start();
+    }
+
+    private void PersistCustomMinutes()
+    {
+        AppSettings.Instance.PomodoroCustomMinutes = _service.CustomMinutes;
+        try { _settingsRepo.Set("pomodoro_custom_min", _service.CustomMinutes.ToString()); }
+        catch { }
+    }
+
     private void PinButton_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
@@ -157,6 +256,25 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // 커스텀 + Idle: 방향키/페이지키로 시간 조정 (방향키 포커스 내비게이션 충돌 방지)
+        if (DialSettable)
+        {
+            int delta = e.Key switch
+            {
+                Key.Right or Key.Up => 1,
+                Key.Left or Key.Down => -1,
+                Key.PageUp => 5,
+                Key.PageDown => -5,
+                _ => 0,
+            };
+            if (delta != 0)
+            {
+                ApplyCustomDelta(delta);
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (e.Key == Key.Space)
         {
             ToggleStartPause();
@@ -243,6 +361,8 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
             Notify(nameof(TitleForeground));
             Notify(nameof(BodyBackground));
             Notify(nameof(BodyForeground));
+            Notify(nameof(WedgeStrokeBrush));
+            _dotsKey = (-1, -1, false);                // 테마 전환 시 도트 브러시 재생성 강제
             RebuildDots();
         }
     }

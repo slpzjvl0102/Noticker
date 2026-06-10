@@ -31,6 +31,7 @@ public partial class App : System.Windows.Application
     private System.Windows.Threading.DispatcherTimer? _pomodoroTimer;
     private PomodoroWindow? _pomodoroWindow;
     private string? _lastTrayTooltip;
+    private string? _pomodoroWedgeColorKey;            // 노션 색 이름 — Idle일 때만 갱신 (색 잠금)
 
     public static new App Current => (App)System.Windows.Application.Current;
 
@@ -239,6 +240,8 @@ public partial class App : System.Windows.Application
     {
         // 시간 소스는 UtcNow — Now 금지 (DST/시계 변경 시 타이머 동결 방지)
         _pomodoro = new PomodoroService(() => DateTime.UtcNow);
+        // 프로퍼티 set — SetCustomDuration의 Custom+Idle 가드를 우회하는 초기 로드 경로
+        _pomodoro.CustomMinutes = AppSettings.Instance.PomodoroCustomMinutes;
         RefreshPomodoroSettings();
         _pomodoro.Changed += OnPomodoroChanged;
         _pomodoro.SessionEnded += OnPomodoroSessionEnded;
@@ -256,6 +259,7 @@ public partial class App : System.Windows.Application
     }
 
     // SettingsWindow 저장 후 호출 — AppSettings → 서비스로 복사 (세션 중 변경은 다음 세션부터)
+    // 주의: CustomMinutes는 여기서 건드리지 않음 — 다이얼 입력만이 변경 (설계 불간섭 invariant)
     public void RefreshPomodoroSettings()
     {
         if (_pomodoro is null) return;
@@ -267,10 +271,15 @@ public partial class App : System.Windows.Application
         _pomodoro.AutoStart = s.PomodoroAutoStart;
     }
 
-    public void OpenPomodoro()
+    public void OpenPomodoro(string? colorKey = null)
     {
         if (_pomodoro is null) return;
+        // 색 잠금: Idle일 때만 키 갱신. 트레이/무카테고리(null)는 마지막 색 유지
+        if (colorKey is not null && _pomodoro.State == PomodoroState.Idle)
+            _pomodoroWedgeColorKey = colorKey;
         _pomodoroWindow ??= new PomodoroWindow(_pomodoro, SettingsRepo!);
+        // ??= 캐시 창에는 매 호출 push — 생성자 전달만으론 색이 첫 오픈에 고정됨
+        _pomodoroWindow.SetWedgeColorKey(_pomodoroWedgeColorKey);
         _pomodoroWindow.Show();      // hide 패턴이라 OfType+Activate만으로는 안 보임
         _pomodoroWindow.Activate();  // 사용자가 직접 연 경우 — 활성화가 맞음
     }
@@ -317,9 +326,12 @@ public partial class App : System.Windows.Application
         }
 
         // 3순위: 트레이 풍선 (Win11 집중 지원이 억제할 수 있는 보조 채널)
-        var msg = e.EndedMode == PomodoroMode.Focus
-            ? $"집중 끝 — {(e.NextMode == PomodoroMode.LongBreak ? "긴" : "짧은")} 휴식하세요"
-            : "휴식 끝 — 다시 집중할 시간";
+        // Kind 최우선 분기 — 커스텀 종료에 포모도로 문구 금지 (EndedMode는 Custom에서 의미 없음)
+        var msg = e.Kind == TimerKind.Custom
+            ? $"타이머 끝 — {e.EndedMinutes}분 경과"
+            : e.EndedMode == PomodoroMode.Focus
+                ? $"집중 끝 — {(e.NextMode == PomodoroMode.LongBreak ? "긴" : "짧은")} 휴식하세요"
+                : "휴식 끝 — 다시 집중할 시간";
         try
         {
             _trayIcon?.ShowBalloonTip(5000, "Noticker — 포모도로", msg, ToolTipIcon.None);
