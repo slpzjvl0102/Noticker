@@ -222,6 +222,7 @@ public partial class OnboardingWindow : Window
                 win.RefreshCategoryOptions();
         }
 
+        App.Current.ShowPostOnboardingUi();
         Close();
     }
 

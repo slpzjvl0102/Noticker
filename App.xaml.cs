@@ -462,6 +462,15 @@ public partial class App : System.Windows.Application
         new OnboardingWindow(SettingsRepo!, _notionClient!).Show();
     }
 
+    // 온보딩 완료 직후 호출 — 설정이 끝났다는 걸 눈에 보이게: 스티커가 하나도
+    // 없으면 한 장 만들고, 설정 창을 연다 (재연결 경로에선 이미 떠 있어 Activate만 됨)
+    public void ShowPostOnboardingUi()
+    {
+        if (StickerRepo!.GetAllSummary().Count == 0)
+            CreateSticker();
+        OpenSettings();
+    }
+
     private async Task RetryPendingAsync()
     {
         AppSettings.Instance.IsSyncPaused = false;
