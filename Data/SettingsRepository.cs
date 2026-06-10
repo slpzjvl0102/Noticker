@@ -73,6 +73,18 @@ public class SettingsRepository
         settings.ColorSwapped = Get("color_swapped") == "true";
         settings.AutostartEnabled = Get("autostart_enabled") == "true";
 
+        settings.PomodoroFocusMinutes = AppSettings.ParseClamped(Get("pomodoro_focus_min"),
+            AppSettings.PomodoroFocusDefault, AppSettings.PomodoroFocusMin, AppSettings.PomodoroFocusMax);
+        settings.PomodoroShortBreakMinutes = AppSettings.ParseClamped(Get("pomodoro_short_break_min"),
+            AppSettings.PomodoroShortBreakDefault, AppSettings.PomodoroBreakMin, AppSettings.PomodoroBreakMax);
+        settings.PomodoroLongBreakMinutes = AppSettings.ParseClamped(Get("pomodoro_long_break_min"),
+            AppSettings.PomodoroLongBreakDefault, AppSettings.PomodoroBreakMin, AppSettings.PomodoroBreakMax);
+        settings.PomodoroLongBreakInterval = AppSettings.ParseClamped(Get("pomodoro_long_break_interval"),
+            AppSettings.PomodoroIntervalDefault, AppSettings.PomodoroIntervalMin, AppSettings.PomodoroIntervalMax);
+        settings.PomodoroAutoStart = Get("pomodoro_auto_start") == "true";
+        settings.PomodoroSound = Get("pomodoro_sound") != "false";          // 기본 true
+        settings.PomodoroAlwaysOnTop = Get("pomodoro_always_on_top") != "false"; // 기본 true
+
         var cache = Get("category_options_cache");
         if (cache is not null)
         {
