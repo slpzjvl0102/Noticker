@@ -41,6 +41,11 @@ public class NotionClient
 
     private void SetAuth()
     {
+        // 토큰이 안 바뀌었으면 쓰지 않는다 — 온보딩 프로브의 per-request 전송이
+        // DefaultRequestHeaders를 읽는 동안 동기화 루프가 같은 컬렉션을 변이하는
+        // 잔여 경쟁을 닫는다 (토큰 변경은 프로브가 안 도는 온보딩 완료 시점뿐)
+        if (_http.DefaultRequestHeaders.Authorization?.Parameter == _settings.NotionToken)
+            return;
         _http.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", _settings.NotionToken);
     }
@@ -269,6 +274,7 @@ public class NotionClient
 
             if (!doc.RootElement.GetProperty("has_more").GetBoolean()) break;
             cursor = doc.RootElement.GetProperty("next_cursor").GetString();
+            if (cursor is null) break;   // 방어: has_more=true + null cursor → 무한 루프 차단
         }
         return results;
     }
