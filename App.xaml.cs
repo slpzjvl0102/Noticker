@@ -33,6 +33,11 @@ public partial class App : System.Windows.Application
     private string? _lastTrayTooltip;
     private string? _pomodoroWedgeColorKey;            // 노션 색 이름 — Idle일 때만 갱신 (색 잠금)
 
+    // 트레이 미니 웨지 — 타이머 동작 중 아이콘 교체, Idle이면 기본 아이콘 복원
+    private System.Drawing.Icon? _baseTrayIcon;
+    private System.Drawing.Icon? _wedgeTrayIcon;
+    private (int Bucket, string? Key, bool Active) _trayWedgeKey = (-1, null, false);
+
     public static new App Current => (App)System.Windows.Application.Current;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -123,9 +128,10 @@ public partial class App : System.Windows.Application
 
     private void InitTray()
     {
+        _baseTrayIcon = LoadTrayIcon();
         _trayIcon = new NotifyIcon
         {
-            Icon = LoadTrayIcon(),
+            Icon = _baseTrayIcon,
             Visible = true,
             Text = "Noticker"
         };
@@ -298,7 +304,44 @@ public partial class App : System.Windows.Application
         if (running && !_pomodoroTimer!.IsEnabled) _pomodoroTimer.Start();
         else if (!running && _pomodoroTimer!.IsEnabled) _pomodoroTimer.Stop();
         UpdateTrayTooltip();
+        UpdateTrayWedgeIcon();
     }
+
+    private void UpdateTrayWedgeIcon()
+    {
+        if (IsShuttingDown || _trayIcon is null || _pomodoro is null) return;
+
+        bool active = _pomodoro.State != PomodoroState.Idle;
+        // 분 단위 quantize — 16px 아이콘에서 초 단위 재렌더는 무의미 (GDI 핸들 churn 방지)
+        int bucket = active ? (int)Math.Ceiling(_pomodoro.WedgeFraction * 60) : -1;
+        var key = (bucket, _pomodoroWedgeColorKey, active);
+        if (key == _trayWedgeKey) return;
+        _trayWedgeKey = key;
+
+        var old = _wedgeTrayIcon;
+        try
+        {
+            if (!active)
+            {
+                _trayIcon.Icon = _baseTrayIcon;
+                _wedgeTrayIcon = null;
+            }
+            else
+            {
+                // 모노톤(키 null)은 라이트/다크 태스크바 양쪽에서 읽히는 중간 회색
+                var color = _pomodoroWedgeColorKey is null
+                    ? System.Drawing.Color.FromArgb(0x9A, 0xA0, 0xA6)
+                    : ToDrawingColor(NotionColorPalette.Wedge(_pomodoroWedgeColorKey));
+                _wedgeTrayIcon = TrayWedgeIcon.Render(_pomodoro.WedgeFraction, color);
+                _trayIcon.Icon = _wedgeTrayIcon;
+            }
+        }
+        catch (ObjectDisposedException) { return; }
+        old?.Dispose();
+    }
+
+    private static System.Drawing.Color ToDrawingColor(System.Windows.Media.Color c) =>
+        System.Drawing.Color.FromArgb(c.R, c.G, c.B);
 
     private void UpdateTrayTooltip()
     {
