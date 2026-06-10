@@ -2,7 +2,7 @@
 # Noticker Time Timer 다이얼 + 커스텀 모드 계획
 
 설계 출처: `~/.gstack/projects/slpzjvl0102-Noticker/jungw-main-design-20260610-timerdial.md` (APPROVED)
-/autoplan 리뷰 완료본 (CEO + Design×2 + Eng×2, 2026-06-10).
+/autoplan 리뷰 완료본 (CEO + Design×2 + Eng×2, 2026-06-10). **Status: APPROVED — 눈금 숫자 유지 확정 (사용자, D8)**
 
 ## 1. 배경
 
@@ -235,7 +235,6 @@ DialMath: `MinutesFromPoint_CcwFrom12` (0°/90°→45/270°→15/359.9°), `Exac
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — (DX scope 없음) | — |
 
 - **VERDICT:** CEO + ENG + DESIGN CLEARED — ready to implement. Dual voices: subagent-only.
-- **CROSS-MODEL:** 디자인 에이전트 2개 충돌 1건 (눈금 숫자) → 최종 게이트 taste 결정으로 표시.
+- **CROSS-MODEL:** 디자인 에이전트 2개 충돌 1건 (눈금 숫자) → 최종 게이트에서 사용자가 유지로 확정 (D8).
 
-**UNRESOLVED DECISIONS:**
-- 눈금 숫자 유지 vs 제거 (taste — 최종 게이트에서 사용자 결정, 기본: 유지)
+NO UNRESOLVED DECISIONS
