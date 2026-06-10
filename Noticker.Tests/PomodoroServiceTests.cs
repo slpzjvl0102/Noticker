@@ -353,6 +353,27 @@ public class PomodoroServiceTests
         Assert.Equal(1, args.CompletedFocusCount);
     }
 
+    // ── Changed 이벤트 (UI 갱신 신호) ──────────────────────────────────────────
+
+    [Fact]
+    public void Changed_FiresOnEveryCommandAndRunningTick()
+    {
+        var s = NewService();
+        int changed = 0;
+        s.Changed += (_, _) => changed++;
+
+        s.Start();                                // 1
+        Advance(TimeSpan.FromSeconds(1));
+        s.Tick();                                 // 2 (Running tick)
+        s.Pause();                                // 3
+        s.Tick();                                 // no-op tick — 발화 안 함
+        s.Resume();                               // 4
+        s.Reset();                                // 5
+        s.Skip();                                 // 6
+
+        Assert.Equal(6, changed);
+    }
+
     // ── 표시 포맷 ──────────────────────────────────────────────────────────────
 
     [Theory]

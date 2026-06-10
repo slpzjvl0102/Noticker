@@ -49,6 +49,9 @@ public class PomodoroService
 
     public event EventHandler<SessionEndedEventArgs>? SessionEnded;
 
+    // 상태가 실제로 변한 모든 명령 + Running 중 매 tick에 발화 — UI/툴팁 갱신 신호
+    public event EventHandler? Changed;
+
     public TimeSpan Remaining => State switch
     {
         PomodoroState.Running => ClampZero(_endTime - _now()),
@@ -86,6 +89,7 @@ public class PomodoroService
         if (State != PomodoroState.Idle) return;
         _endTime = _now() + CurrentDuration(Mode);   // 세션 시작 시 지속시간 스냅샷
         State = PomodoroState.Running;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Pause()
@@ -93,6 +97,7 @@ public class PomodoroService
         if (State != PomodoroState.Running) return;
         _pausedRemaining = ClampZero(_endTime - _now());
         State = PomodoroState.Paused;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Resume()
@@ -100,12 +105,14 @@ public class PomodoroService
         if (State != PomodoroState.Paused) return;
         _endTime = _now() + _pausedRemaining;
         State = PomodoroState.Running;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Reset()
     {
         if (State == PomodoroState.Idle) return;
         State = PomodoroState.Idle;                  // 모드·완료 카운트 유지
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Skip()
@@ -114,12 +121,17 @@ public class PomodoroService
             CompletedFocusCount = 0;                 // 긴 휴식 이탈 = 사이클 종료
         Mode = NextMode();                           // 집중 스킵은 카운트 미증가
         State = PomodoroState.Idle;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Tick()
     {
         if (State != PomodoroState.Running) return;
-        if (_now() < _endTime) return;
+        if (_now() < _endTime)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);  // 카운트다운 표시 갱신
+            return;
+        }
 
         // 세션 완료 — 슬립으로 여러 경계를 넘겼어도 첫 경계만 처리 (알림 1회)
         var ended = Mode;
@@ -132,6 +144,7 @@ public class PomodoroService
             _endTime = _now() + CurrentDuration(Mode);  // wake/완료 시점 기준
         else
             State = PomodoroState.Idle;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private PomodoroMode NextMode() => Mode switch

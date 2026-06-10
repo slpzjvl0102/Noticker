@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Noticker.Data;
 using Noticker.Infrastructure;
 using Noticker.Models;
+using Noticker.Services;
 using Noticker.Sync;
 using Noticker.Windows;
 
@@ -24,6 +25,12 @@ public partial class App : System.Windows.Application
 
     private readonly Dictionary<string, StickerWindow> _stickerWindows = [];
     public bool IsShuttingDown { get; private set; }
+
+    // 포모도로 — App이 composition root (서비스/타이머 소유, 알림 side-effect 수행)
+    private PomodoroService? _pomodoro;
+    private System.Windows.Threading.DispatcherTimer? _pomodoroTimer;
+    private PomodoroWindow? _pomodoroWindow;
+    private string? _lastTrayTooltip;
 
     public static new App Current => (App)System.Windows.Application.Current;
 
@@ -47,6 +54,7 @@ public partial class App : System.Windows.Application
         SyncQueue.SyncError += OnSyncError;
 
         InitTray();
+        InitPomodoro();
         RestoreStickers();
         StartSyncLoop();
         StartRetryTimer();
@@ -130,6 +138,7 @@ public partial class App : System.Windows.Application
         var menu = new ContextMenuStrip();
         menu.Items.Add("노트 목록", null, (_, _) => OpenNoteList());
         menu.Items.Add("새 스티커", null, (_, _) => CreateSticker());
+        menu.Items.Add("포모도로 타이머", null, (_, _) => OpenPomodoro());
         menu.Items.Add("모든 스티커 표시", null, (_, _) => ShowAllStickers());
         menu.Items.Add("수동 Sync", null, async (_, _) => await RetryPendingAsync());
         menu.Items.Add("설정", null, (_, _) => OpenSettings());
@@ -224,6 +233,100 @@ public partial class App : System.Windows.Application
         }
     }
 
+    // ── 포모도로 ───────────────────────────────────────────────────────────────
+
+    private void InitPomodoro()
+    {
+        // 시간 소스는 UtcNow — Now 금지 (DST/시계 변경 시 타이머 동결 방지)
+        _pomodoro = new PomodoroService(() => DateTime.UtcNow);
+        RefreshPomodoroSettings();
+        _pomodoro.Changed += OnPomodoroChanged;
+        _pomodoro.SessionEnded += OnPomodoroSessionEnded;
+
+        // State == Running일 때만 구동 (OnPomodoroChanged가 start/stop 동기화)
+        _pomodoroTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _pomodoroTimer.Tick += (_, _) =>
+        {
+            if (IsShuttingDown) return;
+            _pomodoro!.Tick();
+        };
+    }
+
+    // SettingsWindow 저장 후 호출 — AppSettings → 서비스로 복사 (세션 중 변경은 다음 세션부터)
+    public void RefreshPomodoroSettings()
+    {
+        if (_pomodoro is null) return;
+        var s = AppSettings.Instance;
+        _pomodoro.FocusMinutes = s.PomodoroFocusMinutes;
+        _pomodoro.ShortBreakMinutes = s.PomodoroShortBreakMinutes;
+        _pomodoro.LongBreakMinutes = s.PomodoroLongBreakMinutes;
+        _pomodoro.LongBreakInterval = s.PomodoroLongBreakInterval;
+        _pomodoro.AutoStart = s.PomodoroAutoStart;
+    }
+
+    public void OpenPomodoro()
+    {
+        if (_pomodoro is null) return;
+        _pomodoroWindow ??= new PomodoroWindow(_pomodoro, SettingsRepo!);
+        _pomodoroWindow.Show();      // hide 패턴이라 OfType+Activate만으로는 안 보임
+        _pomodoroWindow.Activate();  // 사용자가 직접 연 경우 — 활성화가 맞음
+    }
+
+    public void ShowPomodoroHideNotice()
+    {
+        if (IsShuttingDown) return;
+        _trayIcon?.ShowBalloonTip(4000, "Noticker",
+            "타이머는 백그라운드에서 계속 실행 중입니다", ToolTipIcon.None);
+    }
+
+    private void OnPomodoroChanged(object? sender, EventArgs e)
+    {
+        if (IsShuttingDown) return;
+        bool running = _pomodoro!.State == PomodoroState.Running;
+        if (running && !_pomodoroTimer!.IsEnabled) _pomodoroTimer.Start();
+        else if (!running && _pomodoroTimer!.IsEnabled) _pomodoroTimer.Stop();
+        UpdateTrayTooltip();
+    }
+
+    private void UpdateTrayTooltip()
+    {
+        if (IsShuttingDown || _trayIcon is null) return;
+        var text = _pomodoro!.TrayTooltip;
+        if (text == _lastTrayTooltip) return;          // 같은 값이면 재대입 생략
+        _lastTrayTooltip = text;
+        try { _trayIcon.Text = text; }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void OnPomodoroSessionEnded(object? sender, SessionEndedEventArgs e)
+    {
+        if (IsShuttingDown) return;
+
+        // 1순위: 위젯 자동 표시 (보장 채널 — ShowActivated=False라 포커스 안 뺏음)
+        if (_pomodoroWindow is not null && !_pomodoroWindow.IsVisible)
+            _pomodoroWindow.Show();
+
+        // 2순위: 사운드 (Asterisk — 보상의 순간에 경고음은 부적합)
+        if (AppSettings.Instance.PomodoroSound)
+        {
+            try { System.Media.SystemSounds.Asterisk.Play(); }
+            catch { /* 장치 없음 등 — 무시 */ }
+        }
+
+        // 3순위: 트레이 풍선 (Win11 집중 지원이 억제할 수 있는 보조 채널)
+        var msg = e.EndedMode == PomodoroMode.Focus
+            ? $"집중 끝 — {(e.NextMode == PomodoroMode.LongBreak ? "긴" : "짧은")} 휴식하세요"
+            : "휴식 끝 — 다시 집중할 시간";
+        try
+        {
+            _trayIcon?.ShowBalloonTip(5000, "Noticker — 포모도로", msg, ToolTipIcon.None);
+        }
+        catch (ObjectDisposedException) { }
+    }
+
     public void OpenSettings()
     {
         var existing = Windows.OfType<SettingsWindow>().FirstOrDefault();
@@ -272,9 +375,11 @@ public partial class App : System.Windows.Application
     private void ExitApp()
     {
         IsShuttingDown = true;
+        _pomodoroTimer?.Stop();      // 트레이 dispose 전에 정지 — disposed NotifyIcon 쓰기 방지
         _cts.Cancel();
         _retryTimer?.Stop();
         _trayIcon?.Dispose();
+        _trayIcon = null;
         Shutdown();
     }
 
