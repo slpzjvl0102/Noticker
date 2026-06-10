@@ -19,6 +19,10 @@ public partial class OnboardingWindow : Window
     private List<(string Id, string Title)> _databases = [];
     private List<string> _selectProperties = [];
 
+    // stale 비동기 완료 가드 — 빠른 재선택/뒤로가기 중 이전 요청의 늦은 응답이
+    // 새 상태를 덮어쓰지 못하게 한다 (잘못된 DB/카테고리 조합 저장 방지)
+    private int _loadEpoch;
+
     public OnboardingWindow(SettingsRepository settings, NotionClient client)
     {
         _settings = settings;
@@ -30,11 +34,20 @@ public partial class OnboardingWindow : Window
             TokenBox.Password = AppSettings.Instance.NotionToken;
     }
 
-    private void TokenLink_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("https://www.notion.so/my-integrations")
+    private void TokenLink_Click(object sender, RoutedEventArgs e)
+    {
+        try
         {
-            UseShellExecute = true
-        });
+            Process.Start(new ProcessStartInfo("https://www.notion.so/my-integrations")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            SetStatus(Step1Status, "브라우저를 열 수 없습니다. https://www.notion.so/my-integrations 를 직접 열어주세요.", error: true);
+        }
+    }
 
     private async void NextButton_Click(object sender, RoutedEventArgs e)
     {
@@ -69,6 +82,7 @@ public partial class OnboardingWindow : Window
 
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
+        _loadEpoch++;   // 1단계 복귀 — 진행 중 로드 무효화
         Step2Panel.Visibility = Visibility.Collapsed;
         Step1Panel.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Collapsed;
@@ -81,22 +95,27 @@ public partial class OnboardingWindow : Window
 
     private async Task LoadDatabasesAsync()
     {
+        var epoch = ++_loadEpoch;
         DbCombo.IsEnabled = false;
         CatCombo.IsEnabled = false;
         FinishButton.IsEnabled = false;
         RefreshDbButton.Visibility = Visibility.Collapsed;
         SetStatus(Step2Status, "DB 목록 불러오는 중…");
 
+        List<(string Id, string Title)> databases;
         try
         {
-            _databases = await _client.SearchDatabasesAsync(_validatedToken, default);
+            databases = await _client.SearchDatabasesAsync(_validatedToken, default);
         }
         catch (Exception ex)
         {
+            if (epoch != _loadEpoch) return;
             SetStatus(Step2Status, $"실패: {ex.Message}", error: true);
             RefreshDbButton.Visibility = Visibility.Visible;
             return;
         }
+        if (epoch != _loadEpoch) return;
+        _databases = databases;
 
         if (_databases.Count == 0)
         {
@@ -122,24 +141,33 @@ public partial class OnboardingWindow : Window
     {
         if (DbCombo.SelectedIndex < 0) return;
 
+        var epoch = ++_loadEpoch;
         CatCombo.IsEnabled = false;
         FinishButton.IsEnabled = false;
         SetStatus(Step2Status, "속성 확인 중…");
 
         var dbId = _databases[DbCombo.SelectedIndex].Id;
+        List<string> selects;
         try
         {
-            _selectProperties = await _client.GetSelectPropertiesAsync(_validatedToken, dbId, default);
+            selects = await _client.GetSelectPropertiesAsync(_validatedToken, dbId, default);
         }
         catch (Exception ex)
         {
+            if (epoch != _loadEpoch) return;
             SetStatus(Step2Status, $"실패: {ex.Message}", error: true);
+            RefreshDbButton.Visibility = Visibility.Visible;
             return;
         }
+        if (epoch != _loadEpoch) return;
+        _selectProperties = selects;
 
         var items = new List<string>(_selectProperties) { NoCategoryLabel };
         CatCombo.ItemsSource = items;
-        CatCombo.SelectedItem = _selectProperties.Contains("Category") ? "Category" : items[0];
+        var current = AppSettings.Instance.CategoryPropertyName;
+        CatCombo.SelectedItem = _selectProperties.Contains(current) ? current
+            : _selectProperties.Contains("Category") ? "Category"
+            : items[0];
         CatCombo.IsEnabled = true;
         FinishButton.IsEnabled = true;
         SetStatus(Step2Status, "");
