@@ -75,7 +75,7 @@ public partial class App : System.Windows.Application
         StartRetryTimer();
 
         if (!AppSettings.Instance.IsConfigured)
-            OpenSettings();
+            OpenOnboarding();
     }
 
     private bool InitDatabase()
@@ -325,6 +325,7 @@ public partial class App : System.Windows.Application
 
     // 카테고리 옵션/색 새로고침 — SettingsWindow와 OnboardingWindow가 공유 (로직 한 곳).
     // 실패 시 예외를 그대로 던진다 — 호출자가 각자 상태 표시를 책임진다.
+    // UI 스레드에서만 호출할 것 — await 후 Windows/StickerWindow 접근이 디스패처 복귀에 의존한다.
     public async Task<int> RefreshCategoryOptionsAsync()
     {
         var options = await _notionClient!.FetchCategoryOptionsAsync(_cts.Token);
@@ -452,6 +453,13 @@ public partial class App : System.Windows.Application
         var existing = Windows.OfType<SettingsWindow>().FirstOrDefault();
         if (existing != null) { existing.Activate(); return; }
         new SettingsWindow(SettingsRepo!, _notionClient!, StickerRepo!).Show();
+    }
+
+    public void OpenOnboarding()
+    {
+        var existing = Windows.OfType<OnboardingWindow>().FirstOrDefault();
+        if (existing != null) { existing.Activate(); return; }
+        new OnboardingWindow(SettingsRepo!, _notionClient!).Show();
     }
 
     private async Task RetryPendingAsync()
