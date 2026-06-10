@@ -226,6 +226,72 @@ public class NotionClient
                 doc.RootElement.GetProperty("has_more").GetBoolean());
     }
 
+    // ── 온보딩 프로브 ──────────────────────────────────────────────────────────
+    // 저장 전 후보 토큰으로 호출 — 토큰을 명시 인자로 받고 DefaultRequestHeaders를
+    // 변이하지 않는다 (동기화 루프와의 헤더 경쟁 방지).
+
+    // 토큰 검증. 성공 시 null, 실패 시 사용자에게 보여줄 메시지.
+    public async Task<string?> ValidateTokenAsync(string token, CancellationToken ct)
+    {
+        try
+        {
+            await SendWithTokenAsync(HttpMethod.Get, "/users/me", token, body: null, ct);
+            return null;
+        }
+        catch (NotionUnauthorizedException)
+        {
+            return "토큰이 유효하지 않습니다 (401).";
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    // 통합에 공유된 DB 전체 목록 (페이지네이션 전부 순회).
+    public async Task<List<(string Id, string Title)>> SearchDatabasesAsync(string token, CancellationToken ct)
+    {
+        var results = new List<(string Id, string Title)>();
+        string? cursor = null;
+
+        while (true)
+        {
+            var body = new Dictionary<string, object>
+            {
+                ["filter"] = new { value = "database", property = "object" },
+                ["page_size"] = 100
+            };
+            if (cursor is not null)
+                body["start_cursor"] = cursor;
+
+            var doc = await SendWithTokenAsync(HttpMethod.Post, "/search", token, body, ct);
+            results.AddRange(NotionDirectory.ParseDatabaseList(doc.RootElement));
+
+            if (!doc.RootElement.GetProperty("has_more").GetBoolean()) break;
+            cursor = doc.RootElement.GetProperty("next_cursor").GetString();
+        }
+        return results;
+    }
+
+    // 선택한 DB의 select 타입 속성 이름 목록.
+    public async Task<List<string>> GetSelectPropertiesAsync(string token, string dbId, CancellationToken ct)
+    {
+        var doc = await SendWithTokenAsync(HttpMethod.Get, $"/databases/{dbId}", token, body: null, ct);
+        return NotionDirectory.ParseSelectPropertyNames(doc.RootElement);
+    }
+
+    private async Task<JsonDocument> SendWithTokenAsync(
+        HttpMethod method, string path, string token, object? body, CancellationToken ct)
+    {
+        var request = new HttpRequestMessage(method, BaseUrl + path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (body is not null)
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        var response = await _http.SendAsync(request, ct);
+        return await HandleResponseAsync(response, pageId: null);
+    }
+
     // Finds the title-type property on a page object and concatenates its plain_text runs.
     // Returns "" if the page is untitled.
     private static string ExtractTitle(JsonElement page)
