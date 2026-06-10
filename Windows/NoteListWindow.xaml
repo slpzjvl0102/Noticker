@@ -120,7 +120,7 @@
                             <!-- hover한 카드에만 보이는 삭제 ✕ -->
                             <Button x:Name="DeleteX" Grid.Column="2" Content="✕"
                                     Tag="{Binding Id}" Click="DeleteButton_Click"
-                                    Visibility="Collapsed"
+                                    Visibility="Hidden"
                                     FontSize="12" Padding="4,0" Margin="8,0,0,0"
                                     VerticalAlignment="Center" Cursor="Hand"
                                     Foreground="{Binding MutedFg}">

@@ -15,6 +15,7 @@ namespace Noticker.Windows;
 public partial class NoteListWindow : Window
 {
     private readonly StickerRepository _repo;
+    private readonly System.ComponentModel.PropertyChangedEventHandler _themeHandler;
     private List<NoteItem> _allItems = [];
     private bool _needsRefresh = false;
 
@@ -49,6 +50,15 @@ public partial class NoteListWindow : Window
         Opacity = 0.12
     };
 
+    static NoteListWindow()
+    {
+        foreach (var p in new[] { _lightPalette, _darkPalette })
+            foreach (var b in new[] { p.WinBg, p.CardBg, p.CardBorder, p.HoverBorder,
+                                      p.TitleFg, p.MutedFg, p.BadgeBg, p.BadgeFg, p.LineBorder })
+                if (b.CanFreeze) b.Freeze();
+        if (_hoverShadow.CanFreeze) _hoverShadow.Freeze();
+    }
+
     private static ThemePalette Palette =>
         AppSettings.Instance.ColorSwapped ? _darkPalette : _lightPalette;
 
@@ -57,11 +67,12 @@ public partial class NoteListWindow : Window
         _repo = repo;
         InitializeComponent();
         ApplyTheme();
-        AppSettings.Instance.PropertyChanged += (_, e) =>
+        _themeHandler = (_, e) =>
         {
             if (e.PropertyName == nameof(AppSettings.ColorSwapped))
                 ApplyTheme();
         };
+        AppSettings.Instance.PropertyChanged += _themeHandler;
         Refresh();
     }
 
@@ -105,7 +116,7 @@ public partial class NoteListWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        AppSettings.Instance.PropertyChanged -= null;
+        AppSettings.Instance.PropertyChanged -= _themeHandler;
         base.OnClosed(e);
     }
 
@@ -143,13 +154,15 @@ public partial class NoteListWindow : Window
             del.Visibility = Visibility.Visible;
     }
 
+    // 주의: 로컬 BorderBrush 대입은 XAML 바인딩을 덮는다 — Standard 가상화(컨테이너 재생성)
+    // 전제. VirtualizationMode=Recycling을 켜려면 ClearValue(BorderBrushProperty)로 복원할 것.
     private void Card_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
         if (sender is not Border card || card.DataContext is not NoteItem item) return;
         card.BorderBrush = item.CardBorderBrush;
         card.Effect = null;
         if (FindVisualChild<Button>(card, "DeleteX") is { } del)
-            del.Visibility = Visibility.Collapsed;
+            del.Visibility = Visibility.Hidden;
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement
