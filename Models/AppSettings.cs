@@ -29,6 +29,7 @@ public class AppSettings : INotifyPropertyChanged
 
     public string? NotionToken { get; set; }
     public string? TargetDbId { get; set; }
+    public string? NotionBotUserId { get; set; }   // null = 덮어쓰기 보호/pull 미활성 (캐시 전)
     public string CategoryPropertyName { get; set; } = "Category";
     public bool AutostartEnabled { get; set; }
     public List<string> CategoryOptions { get; set; } = [];

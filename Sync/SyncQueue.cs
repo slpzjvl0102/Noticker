@@ -9,6 +9,9 @@ public class SyncQueue
     // (stickerId, errorMessage) — subscribe in App.xaml.cs to show tray balloon
     public event Action<string, string>? SyncError;
 
+    // (stickerId, title) — push 보류 충돌 발생. App이 풍선 표시
+    public event Action<string, string>? SyncConflict;
+
     private readonly ConcurrentQueue<Sticker> _queue = new();
     private readonly StickerRepository _repo;
     private readonly NotionClient _client;
@@ -59,6 +62,19 @@ public class SyncQueue
     private void RaiseSyncError(string stickerId, string message) =>
         SyncError?.Invoke(stickerId, message);
 
+    // 충돌 진입 + ack: 저장 쌍을 원격 값으로 갱신해야 다음 사용자 push가 재충돌 없이 이긴다.
+    // 'conflict'는 GetPendingForRetry에서 제외됨 — 재시도 폭주/풍선 스팸 없음.
+    // 다음 키 입력 시 SaveContent가 'pending'으로 덮어 해소
+    private void MarkConflict(Sticker s, string remoteTime, string remoteBy)
+    {
+        s.SyncState = "conflict";
+        _repo.UpdateSyncState(s.Id, "conflict", s.NotionPageId, s.RetryCount);
+        s.NotionLastEdit = remoteTime;
+        s.NotionLastEditBy = remoteBy;
+        _repo.UpdateNotionLastEdit(s.Id, remoteTime, remoteBy);
+        SyncConflict?.Invoke(s.Id, s.Title);
+    }
+
     private async Task ProcessAsync(Sticker s, CancellationToken ct)
     {
         if (_settings.IsSyncPaused) return;
@@ -73,7 +89,47 @@ public class SyncQueue
             }
             else
             {
+                // 0단계 덮어쓰기 보호: children 전체 교체 전에 외부(사람) 수정 검출.
+                // baseline(NotionLastEdit)이 없으면 비교 불가 — 이번 push의 사후 GET이 baseline을 만든다
+                var botId = _settings.NotionBotUserId;
+                if (botId is not null && s.NotionLastEdit is not null)
+                {
+                    var pre = await _client.GetPageMetaAsync(s.NotionPageId, ct);
+                    if (pre is null)
+                    {
+                        // 404 — 기존 재생성 정책과 동일 경로
+                        s.NotionPageId = null;
+                        _queue.Enqueue(s);
+                        _signal.Release();
+                        return;
+                    }
+                    if (PullDecision.IsPushConflict(pre.Value.LastEditedTime, pre.Value.LastEditedById,
+                            s.NotionLastEdit, s.NotionLastEditBy, botId))
+                    {
+                        MarkConflict(s, pre.Value.LastEditedTime, pre.Value.LastEditedById);
+                        return;
+                    }
+                }
+
                 await _client.UpdatePageAsync(s, ct);
+            }
+
+            // 사후 baseline 저장 — children PATCH 응답엔 페이지 last_edited_time이 없음.
+            // push 도중 사람 수정이 끼어든 경우(TOCTOU)도 여기서 검출
+            if (s.NotionPageId is not null && _settings.NotionBotUserId is string bot)
+            {
+                var post = await _client.GetPageMetaAsync(s.NotionPageId, ct);
+                if (post is not null)
+                {
+                    if (post.Value.LastEditedById != bot)
+                    {
+                        MarkConflict(s, post.Value.LastEditedTime, post.Value.LastEditedById);
+                        return;
+                    }
+                    s.NotionLastEdit = post.Value.LastEditedTime;
+                    s.NotionLastEditBy = post.Value.LastEditedById;
+                    _repo.UpdateNotionLastEdit(s.Id, post.Value.LastEditedTime, post.Value.LastEditedById);
+                }
             }
 
             s.SyncState = "synced";

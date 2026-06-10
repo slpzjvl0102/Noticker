@@ -58,6 +58,8 @@ public partial class App : System.Windows.Application
         _notionClient = new NotionClient(AppSettings.Instance);
         SyncQueue = new SyncQueue(StickerRepo!, _notionClient, AppSettings.Instance);
         SyncQueue.SyncError += OnSyncError;
+        SyncQueue.SyncConflict += OnSyncConflict;
+        _ = EnsureBotUserIdAsync();   // 덮어쓰기 보호/pull의 전제 — 실패해도 앱 동작엔 영향 없음
 
         InitTray();
         InitPomodoro();
@@ -412,6 +414,36 @@ public partial class App : System.Windows.Application
                 await SyncQueue!.RetryPendingAsync(_cts.Token);
         };
         _retryTimer.Start();
+    }
+
+    // bot user id 1회 캐시 — 없으면 0단계 보호와 pull이 조용히 비활성 (오프라인 등)
+    private async Task EnsureBotUserIdAsync()
+    {
+        try
+        {
+            if (AppSettings.Instance.NotionBotUserId is not null) return;
+            if (!AppSettings.Instance.IsConfigured) return;
+            var botId = await _notionClient!.GetBotUserIdAsync(_cts.Token);
+            if (botId is null) return;
+            AppSettings.Instance.NotionBotUserId = botId;
+            SettingsRepo!.Set("notion_bot_user_id", botId);
+        }
+        catch { /* 다음 실행에서 재시도 */ }
+    }
+
+    private void OnSyncConflict(string stickerId, string title)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (IsShuttingDown) return;
+            var label = string.IsNullOrWhiteSpace(title) ? "(제목 없음)" : title;
+            try
+            {
+                _trayIcon?.ShowBalloonTip(6000, "Noticker — 동기화 충돌",
+                    $"'{label}' — Notion에서 수정됨, push 보류", ToolTipIcon.Warning);
+            }
+            catch (ObjectDisposedException) { }
+        });
     }
 
     private void OnSyncError(string stickerId, string message)

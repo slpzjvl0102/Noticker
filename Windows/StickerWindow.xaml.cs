@@ -164,16 +164,19 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     public Brush SyncDotColor => _sticker.SyncState switch
     {
-        "synced"  => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
-        "failed"  => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
-        _         => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
+        "synced"   => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
+        "failed"   => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
+        "conflict" => new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00)),
+        _          => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
     };
 
     public string SyncTooltip => _sticker.SyncState switch
     {
-        "synced"  => $"동기화됨 ({_sticker.LastSyncedAt?[..10] ?? ""})",
-        "failed"  => "동기화 실패 (수동 Sync로 재시도)",
-        _         => "동기화 대기 중…",
+        "synced"   => $"동기화됨 ({_sticker.LastSyncedAt?[..10] ?? ""})"
+                      + (_sticker.PullDisabled ? "\nNotion 서식 미지원 — 가져오기 중단됨" : ""),
+        "failed"   => "동기화 실패 (수동 Sync로 재시도)",
+        "conflict" => "Notion과 충돌 — 수정하면 스티커 버전이 push됩니다",
+        _          => "동기화 대기 중…",
     };
 
     // ── Char counter ───────────────────────────────────────────────────────────
