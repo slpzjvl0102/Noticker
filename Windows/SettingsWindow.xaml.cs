@@ -48,6 +48,11 @@ public partial class SettingsWindow : Window
 
     private void ReconnectButton_Click(object sender, RoutedEventArgs e)
     {
+        // 시작 시 떠 있던 비모달 위저드가 있으면 닫는다 — 위저드 2개가 서로
+        // 다른 설정을 마지막-저장-승으로 덮어쓰는 혼란 방지
+        foreach (var w in System.Windows.Application.Current.Windows.OfType<OnboardingWindow>().ToList())
+            w.Close();
+
         var wizard = new OnboardingWindow(_settings, _client) { Owner = this };
         wizard.ShowDialog();
         LoadCurrentValues();   // 연결 요약 갱신
@@ -124,7 +129,8 @@ public partial class SettingsWindow : Window
         else
             StartupManager.Disable();
 
-        // Resume sync if token was previously paused
+        // 저장은 명시적 사용자 행동이므로 sync 일시정지를 해제한다 — 401로 멈춘 뒤
+        // 위저드로 재연결하지 않고 설정만 저장해도 재시도가 다시 돌게.
         if (app.IsConfigured)
             app.IsSyncPaused = false;
     }
