@@ -52,6 +52,7 @@ public partial class NoteListWindow : Window
         NoteList.Foreground = fg;
 
         SearchBorder.BorderBrush = borderColor;
+        ImportBorder.BorderBrush = borderColor;
         SearchBox.Background = dark ? new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)) : Brushes.White;
         SearchBox.Foreground = fg;
         SearchBox.BorderBrush = borderColor;
@@ -165,6 +166,12 @@ public partial class NoteListWindow : Window
             _needsRefresh = true;
             NoteList.SelectedItem = null;
         }
+    }
+
+    private void ImportButton_Click(object sender, RoutedEventArgs e)
+    {
+        App.Current.OpenNotionImport();
+        _needsRefresh = true;   // 가져온 스티커가 목록에 보이도록
     }
 
     private void DeleteButton_Click(object sender, RoutedEventArgs e)

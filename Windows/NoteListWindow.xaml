@@ -30,6 +30,15 @@
             </Grid>
         </Border>
 
+        <!-- Notion 가져오기 진입 -->
+        <Border x:Name="ImportBorder" DockPanel.Dock="Top" Padding="8,6"
+                BorderThickness="0,0,0,1">
+            <Button x:Name="ImportButton" Content="Notion에서 가져오기"
+                    Click="ImportButton_Click"
+                    Padding="6,3" HorizontalAlignment="Stretch"
+                    Cursor="Hand"/>
+        </Border>
+
         <!-- 빈 상태 메시지 -->
         <TextBlock x:Name="EmptyLabel"
                    Visibility="Collapsed"

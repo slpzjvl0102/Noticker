@@ -236,6 +236,43 @@ public partial class App : System.Windows.Application
         new NoteListWindow(StickerRepo!).Show();
     }
 
+    public void OpenNotionImport()
+    {
+        var existing = Windows.OfType<NotionImportWindow>().FirstOrDefault();
+        if (existing != null) { existing.Activate(); return; }
+        new NotionImportWindow(_notionClient!, StickerRepo!).Show();
+    }
+
+    // Notion 페이지 → 새 스티커 (가져오기 전용).
+    // sync_state='synced'가 핵심 — 'pending' 기본값이면 1분 뒤 무편집 자동 push가
+    // 본문 블록을 평탄화 텍스트로 교체해 Notion 원본 서식을 파괴한다 (리뷰 검증 시퀀스)
+    public void CreateImportedSticker(string title, string plainBody, string bodyRtf,
+        string pageId, string editTime, string editBy, bool pullDisabled)
+    {
+        var screen = GetActiveScreen();
+        var wa = screen.WorkingArea;
+        int x = wa.Left + (wa.Width - 250) / 2;
+        int y = wa.Top + (wa.Height - 300) / 2;
+
+        var s = new Sticker
+        {
+            Title = title,
+            Body = plainBody,
+            BodyRtf = bodyRtf,
+            NotionPageId = pageId,
+            NotionLastEdit = editTime,
+            NotionLastEditBy = editBy,
+            PullDisabled = pullDisabled,
+            SyncState = "synced",
+            MonitorDeviceName = screen.DeviceName,
+            PositionX = x - wa.Left,
+            PositionY = y - wa.Top,
+        };
+        StickerRepo!.Insert(s);
+        OpenStickerWindow(s, x, y);
+        _stickerWindows[s.Id].Activate();
+    }
+
     private void ShowAllStickers()
     {
         foreach (var (_, w) in _stickerWindows)
