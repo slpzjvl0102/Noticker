@@ -172,6 +172,7 @@ public class SyncQueue
         }
         catch (Exception ex)
         {
+            Infrastructure.SyncLog.Write($"push: EXCEPTION {ex.GetType().Name}: {ex.Message}");
             s.RetryCount++;
             var newState = s.RetryCount >= 3 ? "failed" : "pending";
             s.SyncState = newState;

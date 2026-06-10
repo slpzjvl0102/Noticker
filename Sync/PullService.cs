@@ -1,4 +1,5 @@
 using Noticker.Data;
+using Noticker.Infrastructure;
 using Noticker.Models;
 using Noticker.Windows;
 
@@ -58,10 +59,16 @@ public class PullService
                 return;
             }
 
+            // 오름차순을 클라이언트에서 강제 — 서버 sorts 파라미터가 실제로는 순서를
+            // 보장하지 않는 것이 로그로 관찰됨 (16:08 → 16:09 → 16:08 순서로 반환).
+            // 커서/defer 로직은 오름차순이 전제: 어긋나면 defer된 옛 페이지를 이미 전진한
+            // 커서가 지나쳐 그 수정을 영영 못 받는다
             var pages = (await _client.QueryUpdatedPagesAsync(cursor, ct))
                 .Select(t => new PageMeta(t.PageId, t.LastEditedTime, t.LastEditedById, t.Title))
+                .OrderBy(p => p.LastEditedTime, StringComparer.Ordinal)
                 .ToList();
             if (pages.Count == 0) return;
+            SyncLog.Write($"pull: cursor={cursor} pages={pages.Count}");
 
             // pageId → 창이 들고 있는 live Sticker 인스턴스.
             // GetAll 사본을 갱신하면 안 됨 — SavePosition/SaveSize가 창의 인스턴스로
@@ -104,6 +111,7 @@ public class PullService
                     debouncePending: win.IsSyncPending,
                     hasKeyboardFocus: win.IsKeyboardFocusWithin,
                     pullDisabled: s.PullDisabled);
+                SyncLog.Write($"pull: page={p.PageId[..8]} time={p.LastEditedTime} by={(p.LastEditedById == botId ? "bot" : "human")} state={s.SyncState} → {action}");
 
                 switch (action)
                 {
@@ -192,8 +200,13 @@ public class PullService
         {
             // push 경로와 동일한 처우 — 401은 조용히 매분 재시도하면 안 됨
             _settings.IsSyncPaused = true;
+            SyncLog.Write("pull: 401 — sync paused");
         }
-        catch { /* 오프라인 등 — 다음 사이클 재시도 (코드베이스의 silent-catch 어법) */ }
+        catch (Exception ex)
+        {
+            // 오프라인 등 — 다음 사이클 재시도. 단, 어디서 죽었는지는 남긴다
+            SyncLog.Write($"pull: EXCEPTION {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
         finally
         {
             _running = false;
