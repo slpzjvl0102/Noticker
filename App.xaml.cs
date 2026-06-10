@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Forms;
 using Microsoft.Data.Sqlite;
 using Noticker.Data;
+using Noticker.Infrastructure;
 using Noticker.Models;
 using Noticker.Sync;
 using Noticker.Windows;
@@ -138,21 +139,19 @@ public partial class App : System.Windows.Application
         _trayIcon.ContextMenuStrip = menu;
     }
 
+    private static IReadOnlyList<(string DeviceName, System.Drawing.Rectangle Area)> CurrentScreens() =>
+        Screen.AllScreens.Select(sc => (sc.DeviceName, sc.WorkingArea)).ToList();
+
     private void RestoreStickers()
     {
         var stickers = StickerRepo!.GetAll();
-        var screens = Screen.AllScreens;
+        var screens = CurrentScreens();
+        var primary = Screen.PrimaryScreen!.WorkingArea;
 
         foreach (var s in stickers)
         {
-            var screen = screens.FirstOrDefault(sc =>
-                string.Equals(sc.DeviceName, s.MonitorDeviceName, StringComparison.OrdinalIgnoreCase))
-                ?? Screen.PrimaryScreen!;
-
-            var wa = screen.WorkingArea;
-            int x = Math.Clamp(s.PositionX + wa.Left, wa.Left, wa.Right - s.Width);
-            int y = Math.Clamp(s.PositionY + wa.Top, wa.Top, wa.Bottom - s.Height);
-
+            var wa = ScreenPlacement.SelectWorkingArea(screens, primary, s.MonitorDeviceName);
+            var (x, y) = ScreenPlacement.ClampToArea(wa, s.PositionX, s.PositionY, s.Width, s.Height);
             OpenStickerWindow(s, x, y);
         }
     }
