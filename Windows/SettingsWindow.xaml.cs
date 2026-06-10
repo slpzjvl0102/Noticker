@@ -1,7 +1,5 @@
-using System.IO;
 using System.Reflection;
 using System.Windows;
-using Brushes = System.Windows.Media.Brushes;
 using Noticker.Data;
 using Noticker.Infrastructure;
 using Noticker.Models;
@@ -29,11 +27,9 @@ public partial class SettingsWindow : Window
     {
         var app = AppSettings.Instance;
 
-        if (app.NotionToken is not null)
-            TokenBox.Password = app.NotionToken;
-
-        DbIdBox.Text = app.TargetDbId ?? "";
-        CategoryPropertyBox.Text = app.CategoryPropertyName;
+        ConnectionSummary.Text = app.IsConfigured
+            ? $"연결됨: {app.NotionDbTitle ?? app.TargetDbId}"
+            : "연결 안 됨";
         ColorSwapCheck.IsChecked = app.ColorSwapped;
         AutostartCheck.IsChecked = app.AutostartEnabled;
 
@@ -50,36 +46,17 @@ public partial class SettingsWindow : Window
             : "캐시 없음 — 새로고침 버튼을 클릭하세요";
     }
 
-    private async void TestButton_Click(object sender, RoutedEventArgs e)
+    private void ReconnectButton_Click(object sender, RoutedEventArgs e)
     {
-        TestButton.IsEnabled = false;
-        TestResultText.Foreground = Brushes.Gray;
-        TestResultText.Text = "테스트 중…";
-
-        ApplyToAppSettings();
-
-        var error = await _client.TestConnectionAsync(default);
-        if (error is null)
-        {
-            TestResultText.Foreground = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(0x15, 0x80, 0x3D)); // green-700, 6.1:1 on #FAFAFA
-            TestResultText.Text = "연결 성공!";
-        }
-        else
-        {
-            TestResultText.Foreground = Brushes.Red;
-            TestResultText.Text = $"실패: {error}";
-        }
-
-        TestButton.IsEnabled = true;
+        var wizard = new OnboardingWindow(_settings, _client) { Owner = this };
+        wizard.ShowDialog();
+        LoadCurrentValues();   // 연결 요약 갱신
     }
 
     private async void RefreshCatButton_Click(object sender, RoutedEventArgs e)
     {
         RefreshCatButton.IsEnabled = false;
         CatStatusText.Text = "불러오는 중…";
-
-        ApplyToAppSettings();
 
         try
         {
@@ -107,14 +84,6 @@ public partial class SettingsWindow : Window
     {
         var app = AppSettings.Instance;
 
-        var token = TokenBox.Password.Trim();
-        if (!string.IsNullOrEmpty(token))
-            app.NotionToken = token;
-
-        app.TargetDbId = NormalizeDbId(DbIdBox.Text.Trim());
-        app.CategoryPropertyName = string.IsNullOrWhiteSpace(CategoryPropertyBox.Text)
-            ? "Category"
-            : CategoryPropertyBox.Text.Trim();
         app.ColorSwapped = ColorSwapCheck.IsChecked == true;
         app.AutostartEnabled = AutostartCheck.IsChecked == true;
 
@@ -135,18 +104,6 @@ public partial class SettingsWindow : Window
     {
         var app = AppSettings.Instance;
 
-        if (app.NotionToken is not null)
-        {
-            _settings.SaveToken(app.NotionToken);
-            // 토큰이 다른 integration으로 바뀌었을 수 있음 — 옛 bot id가 남으면
-            // 모든 push가 "남의 수정"으로 보여 매번 충돌 처리된다
-            App.Current.InvalidateBotUserId();
-        }
-
-        if (app.TargetDbId is not null)
-            _settings.Set("target_db_id", app.TargetDbId);
-
-        _settings.Set("category_property_name", app.CategoryPropertyName);
         _settings.Set("color_swapped", app.ColorSwapped ? "true" : "false");
         _settings.Set("autostart_enabled", app.AutostartEnabled ? "true" : "false");
 
@@ -172,31 +129,4 @@ public partial class SettingsWindow : Window
             app.IsSyncPaused = false;
     }
 
-    // Accepts full Notion URL or raw UUID (with or without dashes).
-    // Notion URL format: https://www.notion.so/{workspace}/{PageTitle}-{32hex}?v={viewId}
-    // The database UUID is always the trailing 32 hex chars of the last path segment.
-    private static string? NormalizeDbId(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return null;
-
-        // Strip query string and trailing slash
-        var clean = input.Split('?')[0].TrimEnd('/');
-        var last = clean.Split('/').LastOrDefault() ?? clean;
-
-        // Remove all dashes to collapse any UUID-with-dashes or Title-UUID patterns
-        var raw = last.Replace("-", "");
-
-        // UUID is exactly 32 hex chars; in Title-UUID format it's the last 32 chars
-        if (raw.Length >= 32)
-        {
-            var candidate = raw[^32..];
-            if (IsHex(candidate))
-                return candidate;
-        }
-
-        return input; // return as-is so the user can see what failed
-    }
-
-    private static bool IsHex(string s) =>
-        s.Length > 0 && s.All(c => char.IsAsciiHexDigit(c));
 }

@@ -143,26 +143,16 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="20,16,20,20">
 
-                <!-- Notion Token -->
-                <TextBlock Text="NOTION API TOKEN" Style="{StaticResource FieldLabelStyle}"/>
-                <PasswordBox x:Name="TokenBox"/>
-
-                <!-- Target DB -->
-                <TextBlock Text="TARGET DB ID (또는 URL)" Style="{StaticResource FieldLabelStyle}"/>
-                <TextBox x:Name="DbIdBox"/>
-
-                <!-- Category property name -->
-                <TextBlock Text="CATEGORY PROPERTY 이름" Style="{StaticResource FieldLabelStyle}"/>
-                <TextBox x:Name="CategoryPropertyBox" Text="Category"/>
-
-                <!-- Test connection -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                    <Button x:Name="TestButton" Content="연결 테스트"
+                <!-- 노션 연결 — 입력은 OnboardingWindow가 소유, 여기는 요약만 -->
+                <TextBlock Text="노션 연결" Style="{StaticResource SectionHeadingStyle}"
+                           Margin="0,0,0,8"/>
+                <TextBlock x:Name="ConnectionSummary" FontSize="13" Foreground="#1A1A1A"
+                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <Button x:Name="ReconnectButton" Content="연결 다시 설정"
                             Style="{StaticResource ActionButtonStyle}"
-                            Click="TestButton_Click"/>
+                            Click="ReconnectButton_Click"/>
                 </StackPanel>
-                <TextBlock x:Name="TestResultText" FontSize="12" Margin="0,0,0,12"
-                           TextWrapping="Wrap"/>
 
                 <Separator Background="#EEEEEE" Margin="0,4,0,0"/>
 
