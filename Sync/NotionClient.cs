@@ -138,6 +138,112 @@ public class NotionClient
         }
     }
 
+    // Fetches a page's (last_edited_time, last_edited_by.id) pair for overwrite protection
+    // and conflict detection. Returns null if the page no longer exists (404).
+    public async Task<(string LastEditedTime, string LastEditedById)?> GetPageMetaAsync(string pageId, CancellationToken ct)
+    {
+        SetAuth();
+        var doc = await GetOrNullOn404Async($"/pages/{pageId}", ct);
+        if (doc is null) return null;
+
+        var root = doc.RootElement;
+        var time = root.GetProperty("last_edited_time").GetString() ?? "";
+        var by = root.GetProperty("last_edited_by").GetProperty("id").GetString() ?? "";
+        return (time, by);
+    }
+
+    // Returns the integration's bot user id (for echo filtering), or null on any failure —
+    // caller treats null as "protection not yet active".
+    public async Task<string?> GetBotUserIdAsync(CancellationToken ct)
+    {
+        SetAuth();
+        try
+        {
+            var doc = await GetAsync("/users/me", ct);
+            return doc.RootElement.GetProperty("id").GetString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Queries the target DB for pages sorted by last_edited_time ascending.
+    // cursorIso null = no filter (import-list use); otherwise on_or_after filter for polling.
+    public async Task<List<(string PageId, string LastEditedTime, string LastEditedById, string Title)>> QueryUpdatedPagesAsync(
+        string? cursorIso, CancellationToken ct)
+    {
+        SetAuth();
+
+        var results = new List<(string PageId, string LastEditedTime, string LastEditedById, string Title)>();
+        string? startCursor = null;
+
+        // 페이지네이션 하드 캡 3페이지(300건) — 오프라인 복귀 burst 방어.
+        // 초과분은 폴링 커서(on_or_after + 오름차순 정렬)가 다음 사이클에 이어받는다.
+        for (int page = 0; page < 3; page++)
+        {
+            var body = new Dictionary<string, object>
+            {
+                ["page_size"] = 100,
+                ["sorts"] = new[] { new { timestamp = "last_edited_time", direction = "ascending" } }
+            };
+            if (cursorIso is not null)
+                body["filter"] = new { timestamp = "last_edited_time", last_edited_time = new { on_or_after = cursorIso } };
+            if (startCursor is not null)
+                body["start_cursor"] = startCursor;
+
+            var doc = await PostAsync($"/databases/{_settings.TargetDbId}/query", body, ct);
+            var root = doc.RootElement;
+
+            foreach (var p in root.GetProperty("results").EnumerateArray())
+            {
+                var id = p.GetProperty("id").GetString() ?? "";
+                var time = p.GetProperty("last_edited_time").GetString() ?? "";
+                var by = p.GetProperty("last_edited_by").GetProperty("id").GetString() ?? "";
+                results.Add((id, time, by, ExtractTitle(p)));
+            }
+
+            if (!root.GetProperty("has_more").GetBoolean()) break;
+            startCursor = root.GetProperty("next_cursor").GetString();
+        }
+
+        return results;
+    }
+
+    // Returns the page's child block array (cloned so it outlives the response document),
+    // or null if the page no longer exists (404).
+    // 단일 페이지(100블록)만 읽는다 — 스티커 규모 노트는 100블록 안에 들어간다 (수용된 제한).
+    public async Task<JsonElement?> GetPageBlocksAsync(string pageId, CancellationToken ct)
+    {
+        SetAuth();
+        var doc = await GetOrNullOn404Async($"/blocks/{pageId}/children?page_size=100", ct);
+        if (doc is null) return null;
+        return doc.RootElement.GetProperty("results").Clone();
+    }
+
+    // Finds the title-type property on a page object and concatenates its plain_text runs.
+    // Returns "" if the page is untitled.
+    private static string ExtractTitle(JsonElement page)
+    {
+        if (!page.TryGetProperty("properties", out var props)) return "";
+
+        foreach (var prop in props.EnumerateObject())
+        {
+            if (prop.Value.TryGetProperty("type", out var type) && type.GetString() == "title" &&
+                prop.Value.TryGetProperty("title", out var runs))
+            {
+                var sb = new StringBuilder();
+                foreach (var run in runs.EnumerateArray())
+                {
+                    if (run.TryGetProperty("plain_text", out var pt))
+                        sb.Append(pt.GetString());
+                }
+                return sb.ToString();
+            }
+        }
+        return "";
+    }
+
     // Returns IDs of all direct child blocks of a page (for clearing before re-write).
     private async Task<List<string>> GetChildBlockIdsAsync(string pageId, CancellationToken ct)
     {
@@ -270,6 +376,15 @@ public class NotionClient
     private async Task<JsonDocument> GetAsync(string path, CancellationToken ct)
     {
         var response = await _http.GetAsync(BaseUrl + path, ct);
+        return await HandleResponseAsync(response, pageId: null);
+    }
+
+    // GET that yields null on 404 instead of throwing — pull/protection probes treat
+    // a deleted page as absence, not an error.
+    private async Task<JsonDocument?> GetOrNullOn404Async(string path, CancellationToken ct)
+    {
+        var response = await _http.GetAsync(BaseUrl + path, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
         return await HandleResponseAsync(response, pageId: null);
     }
 

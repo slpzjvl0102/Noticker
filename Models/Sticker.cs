@@ -18,6 +18,9 @@ public class Sticker
     public string? BodyRtf { get; set; }
     public string FontFamily { get; set; } = "";
     public bool IsHidden { get; set; } = false;
+    public string? NotionLastEdit { get; set; }
+    public string? NotionLastEditBy { get; set; }
+    public bool PullDisabled { get; set; } = false;
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("O");
     public string UpdatedAt { get; set; } = DateTime.UtcNow.ToString("O");
 }

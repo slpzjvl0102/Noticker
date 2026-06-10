@@ -50,6 +50,7 @@ public class StickerRepository
         }
         if (version < 2) MigrateToV2(conn);
         if (version < 3) MigrateToV3(conn);
+        if (version < 4) MigrateToV4(conn);
     }
 
     private static void MigrateToV2(SqliteConnection conn)
@@ -74,6 +75,22 @@ public class StickerRepository
         cmd.CommandText = "ALTER TABLE stickers ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0";
         cmd.ExecuteNonQuery();
         cmd.CommandText = "PRAGMA user_version = 3";
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
+
+    private static void MigrateToV4(SqliteConnection conn)
+    {
+        using var tx = conn.BeginTransaction();
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN notion_last_edit TEXT";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN notion_last_edit_by TEXT";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN pull_disabled INTEGER NOT NULL DEFAULT 0";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "PRAGMA user_version = 4";
         cmd.ExecuteNonQuery();
         tx.Commit();
     }
@@ -113,12 +130,14 @@ public class StickerRepository
                     (id, notion_page_id, title, body, category,
                      monitor_device_name, position_x, position_y, width, height,
                      sync_state, retry_count, last_synced_at, created_at, updated_at,
-                     body_rtf, font_family, is_hidden)
+                     body_rtf, font_family, is_hidden,
+                     notion_last_edit, notion_last_edit_by, pull_disabled)
                 VALUES
                     ($id, $npid, $title, $body, $cat,
                      $dev, $x, $y, $w, $h,
                      $ss, $rc, $lsa, $ca, $ua,
-                     $body_rtf, $font_family, $is_hidden)
+                     $body_rtf, $font_family, $is_hidden,
+                     $notion_last_edit, $notion_last_edit_by, $pull_disabled)
                 """;
             Bind(cmd, s);
             cmd.ExecuteNonQuery();
@@ -153,7 +172,10 @@ public class StickerRepository
                     updated_at          = $ua,
                     body_rtf            = $body_rtf,
                     font_family         = $font_family,
-                    is_hidden           = $is_hidden
+                    is_hidden           = $is_hidden,
+                    notion_last_edit    = $notion_last_edit,
+                    notion_last_edit_by = $notion_last_edit_by,
+                    pull_disabled       = $pull_disabled
                 WHERE id = $id
                 """;
             Bind(cmd, s);
@@ -198,6 +220,7 @@ public class StickerRepository
         return result;
     }
 
+    // updated_at은 사용자 편집만 갱신한다 — sync 기계가 건드리면 pull 판정이 오염됨
     public void UpdateSyncState(string id, string state, string? pageId, int retryCount)
     {
         try
@@ -209,8 +232,7 @@ public class StickerRepository
                     sync_state      = $ss,
                     notion_page_id  = $npid,
                     retry_count     = $rc,
-                    last_synced_at  = $lsa,
-                    updated_at      = $ua
+                    last_synced_at  = $lsa
                 WHERE id = $id
                 """;
             cmd.Parameters.AddWithValue("$ss", state);
@@ -219,13 +241,52 @@ public class StickerRepository
             cmd.Parameters.AddWithValue("$lsa", state == "synced"
                 ? (object)DateTime.UtcNow.ToString("O")
                 : DBNull.Value);
-            cmd.Parameters.AddWithValue("$ua", DateTime.UtcNow.ToString("O"));
             cmd.Parameters.AddWithValue("$id", id);
             cmd.ExecuteNonQuery();
         }
         catch (SqliteException ex)
         {
             throw new InvalidOperationException($"SQLite sync state update failed: {ex.Message}", ex);
+        }
+    }
+
+    public void UpdateNotionLastEdit(string id, string time, string editedBy)
+    {
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE stickers SET
+                    notion_last_edit    = $nle,
+                    notion_last_edit_by = $nleb
+                WHERE id = $id
+                """;
+            cmd.Parameters.AddWithValue("$nle", time);
+            cmd.Parameters.AddWithValue("$nleb", editedBy);
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new InvalidOperationException($"SQLite notion last edit update failed: {ex.Message}", ex);
+        }
+    }
+
+    public void SetPullDisabled(string id, bool disabled)
+    {
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE stickers SET pull_disabled = $pd WHERE id = $id";
+            cmd.Parameters.AddWithValue("$pd", disabled ? 1 : 0);
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new InvalidOperationException($"SQLite pull disabled update failed: {ex.Message}", ex);
         }
     }
 
@@ -256,6 +317,9 @@ public class StickerRepository
         cmd.Parameters.AddWithValue("$body_rtf", (object?)s.BodyRtf ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$font_family", s.FontFamily);
         cmd.Parameters.AddWithValue("$is_hidden", s.IsHidden ? 1 : 0);
+        cmd.Parameters.AddWithValue("$notion_last_edit", (object?)s.NotionLastEdit ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$notion_last_edit_by", (object?)s.NotionLastEditBy ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pull_disabled", s.PullDisabled ? 1 : 0);
     }
 
     private static Sticker Map(SqliteDataReader r) => new()
@@ -278,5 +342,8 @@ public class StickerRepository
         BodyRtf = r.IsDBNull(r.GetOrdinal("body_rtf")) ? null : r.GetString(r.GetOrdinal("body_rtf")),
         FontFamily = r.GetString(r.GetOrdinal("font_family")),
         IsHidden = r.GetInt32(r.GetOrdinal("is_hidden")) != 0,
+        NotionLastEdit = r.IsDBNull(r.GetOrdinal("notion_last_edit")) ? null : r.GetString(r.GetOrdinal("notion_last_edit")),
+        NotionLastEditBy = r.IsDBNull(r.GetOrdinal("notion_last_edit_by")) ? null : r.GetString(r.GetOrdinal("notion_last_edit_by")),
+        PullDisabled = r.GetInt32(r.GetOrdinal("pull_disabled")) != 0,
     };
 }

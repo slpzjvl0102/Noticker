@@ -244,4 +244,137 @@ public class StickerRepositoryTests : IDisposable
         Assert.Equal("B", summary[0].Title);
         Assert.Equal("A", summary[1].Title);
     }
+
+    // ── V4: NotionLastEdit / NotionLastEditBy / PullDisabled ──────────────────
+
+    [Fact]
+    public void Insert_PersistsV4Fields()
+    {
+        var s = MakeSticker();
+        s.NotionLastEdit = "2026-06-10T12:00:00.000Z";
+        s.NotionLastEditBy = "user-abc";
+        s.PullDisabled = true;
+        _repo.Insert(s);
+
+        var loaded = _repo.GetAll()[0];
+        Assert.Equal("2026-06-10T12:00:00.000Z", loaded.NotionLastEdit);
+        Assert.Equal("user-abc", loaded.NotionLastEditBy);
+        Assert.True(loaded.PullDisabled);
+    }
+
+    [Fact]
+    public void Insert_V4FieldsDefaultToNullAndFalse()
+    {
+        _repo.Insert(MakeSticker());
+
+        var loaded = _repo.GetAll()[0];
+        Assert.Null(loaded.NotionLastEdit);
+        Assert.Null(loaded.NotionLastEditBy);
+        Assert.False(loaded.PullDisabled);
+    }
+
+    [Fact]
+    public void Update_PersistsV4Fields()
+    {
+        var s = MakeSticker();
+        _repo.Insert(s);
+
+        s.NotionLastEdit = "2026-06-10T13:00:00.000Z";
+        s.NotionLastEditBy = "user-def";
+        s.PullDisabled = true;
+        _repo.Update(s);
+
+        var loaded = _repo.GetAll()[0];
+        Assert.Equal("2026-06-10T13:00:00.000Z", loaded.NotionLastEdit);
+        Assert.Equal("user-def", loaded.NotionLastEditBy);
+        Assert.True(loaded.PullDisabled);
+    }
+
+    // ── UpdateNotionLastEdit ───────────────────────────────────────────────────
+
+    [Fact]
+    public void UpdateNotionLastEdit_WritesBothColumns()
+    {
+        var s = MakeSticker();
+        _repo.Insert(s);
+
+        _repo.UpdateNotionLastEdit(s.Id, "2026-06-10T14:00:00.000Z", "user-ghi");
+
+        var loaded = _repo.GetAll()[0];
+        Assert.Equal("2026-06-10T14:00:00.000Z", loaded.NotionLastEdit);
+        Assert.Equal("user-ghi", loaded.NotionLastEditBy);
+    }
+
+    [Fact]
+    public void UpdateNotionLastEdit_DoesNotTouchOtherColumns()
+    {
+        var s = MakeSticker("keep-title", "keep-body");
+        _repo.Insert(s);
+        var before = _repo.GetAll()[0];
+
+        _repo.UpdateNotionLastEdit(s.Id, "2026-06-10T14:00:00.000Z", "user-ghi");
+
+        var loaded = _repo.GetAll()[0];
+        Assert.Equal("keep-title", loaded.Title);
+        Assert.Equal("keep-body", loaded.Body);
+        Assert.Equal(before.SyncState, loaded.SyncState);
+        Assert.Equal(before.UpdatedAt, loaded.UpdatedAt);
+        Assert.Equal(before.PullDisabled, loaded.PullDisabled);
+    }
+
+    // ── SetPullDisabled ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SetPullDisabled_RoundTrips()
+    {
+        var s = MakeSticker();
+        _repo.Insert(s);
+
+        _repo.SetPullDisabled(s.Id, true);
+        Assert.True(_repo.GetAll()[0].PullDisabled);
+
+        _repo.SetPullDisabled(s.Id, false);
+        Assert.False(_repo.GetAll()[0].PullDisabled);
+    }
+
+    // ── Conflict state ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void GetPendingForRetry_ExcludesConflictStickers()
+    {
+        var s = MakeSticker("title", "body");
+        s.SyncState = "conflict";
+        _repo.Insert(s);
+
+        var pending = _repo.GetPendingForRetry();
+
+        Assert.Empty(pending);
+    }
+
+    // ── updated_at hygiene ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void UpdateSyncState_DoesNotChangeUpdatedAt()
+    {
+        var s = MakeSticker();
+        _repo.Insert(s);
+        var before = _repo.GetAll()[0].UpdatedAt;
+
+        _repo.UpdateSyncState(s.Id, "synced", "page-abc", 0);
+
+        var after = _repo.GetAll()[0].UpdatedAt;
+        Assert.Equal(before, after);
+    }
+
+    // ── Migration ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void FreshDatabase_ReportsUserVersion4()
+    {
+        using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_dbPath}");
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA user_version";
+        Assert.Equal(4, Convert.ToInt32(cmd.ExecuteScalar()));
+    }
 }
