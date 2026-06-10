@@ -2,7 +2,7 @@
 # Noticker 포모도로 타이머 기능 계획
 
 Noticker(WPF + .NET 8 스티커메모 앱)에 포모도로 타이머를 추가하는 계획.
-/autoplan 리뷰 완료본 (CEO + Design + Eng, 2026-06-10).
+/autoplan 리뷰 완료본 (CEO + Design + Eng, 2026-06-10). **Status: APPROVED (사용자 승인, 그대로 승인)**
 
 ## 1. 배경 / 동기
 
