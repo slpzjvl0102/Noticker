@@ -15,6 +15,9 @@ public class DebouncedSyncService
         _queue = queue;
     }
 
+    // pull의 dirty 가드용 — _pending은 enqueue 후 null로 돌아가지 않으므로 타이머 상태가 기준
+    public bool IsPending => _timer?.IsEnabled == true;
+
     // Called by StickerWindow whenever title or body changes.
     public void OnChanged(Sticker sticker)
     {

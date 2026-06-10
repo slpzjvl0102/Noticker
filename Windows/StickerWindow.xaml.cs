@@ -31,6 +31,9 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     public Sticker Sticker => _sticker;
     public event EventHandler? RealClosed;
 
+    // pull의 dirty 가드용 — debounce 대기 중이면 pull이 이 스티커를 건너뜀
+    public bool IsSyncPending => _debounce.IsPending;
+
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify(string name) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -269,6 +272,31 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         EditingCommands.ToggleNumbering.Execute(null, BodyBox);
         BodyBox.Focus();
+    }
+
+    // Pull 적용 — PullService(UI 스레드)에서 호출. 호출 전 PullService가 _sticker의
+    // NotionLastEdit/By 쌍을 갱신해 두면 여기의 _repo.Update가 전체 행과 함께 영속한다.
+    // _loading 가드로 TextChanged → pending 오염 방지
+    public void ApplyPulledContent(string title, string plainBody, string bodyRtf)
+    {
+        _loading = true;
+        try
+        {
+            _sticker.Title = title;
+            Notify(nameof(StickerTitle));
+            _sticker.Body = plainBody;
+            _sticker.BodyRtf = bodyRtf;
+            LoadBody();
+            _sticker.SyncState = "synced";
+            _sticker.RetryCount = 0;
+            try { _repo.Update(_sticker); }
+            catch { /* 다음 폴링/push가 재시도 */ }
+            UpdateSyncIndicator();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private void PomodoroButton_Click(object sender, RoutedEventArgs e)

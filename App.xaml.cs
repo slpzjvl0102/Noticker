@@ -20,6 +20,7 @@ public partial class App : System.Windows.Application
     public SettingsRepository? SettingsRepo { get; private set; }
     public SyncQueue? SyncQueue { get; private set; }
     private NotionClient? _notionClient;
+    private PullService? _pullService;
     private CancellationTokenSource _cts = new();
     private System.Windows.Threading.DispatcherTimer? _retryTimer;
 
@@ -60,6 +61,11 @@ public partial class App : System.Windows.Application
         SyncQueue.SyncError += OnSyncError;
         SyncQueue.SyncConflict += OnSyncConflict;
         _ = EnsureBotUserIdAsync();   // 덮어쓰기 보호/pull의 전제 — 실패해도 앱 동작엔 영향 없음
+
+        _pullService = new PullService(StickerRepo!, SettingsRepo!, _notionClient,
+            AppSettings.Instance,
+            id => _stickerWindows.TryGetValue(id, out var w) ? w : null,
+            OnPullApplied);
 
         InitTray();
         InitPomodoro();
@@ -395,6 +401,24 @@ public partial class App : System.Windows.Application
     {
         AppSettings.Instance.IsSyncPaused = false;
         await SyncQueue!.RetryPendingAsync(_cts.Token);
+        // 수동 Sync는 pull도 함께 수행
+        if (_pullService is not null)
+            await _pullService.RunOnceAsync(_cts.Token);
+    }
+
+    private void OnPullApplied(string title, string message)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (IsShuttingDown) return;
+            var label = string.IsNullOrWhiteSpace(title) ? "(제목 없음)" : title;
+            try
+            {
+                _trayIcon?.ShowBalloonTip(5000, "Noticker — Notion 갱신",
+                    $"'{label}' 메모가 {message}", ToolTipIcon.Info);
+            }
+            catch (ObjectDisposedException) { }
+        });
     }
 
     private void StartSyncLoop()
@@ -410,8 +434,10 @@ public partial class App : System.Windows.Application
         };
         _retryTimer.Tick += async (_, _) =>
         {
-            if (!AppSettings.Instance.IsSyncPaused)
-                await SyncQueue!.RetryPendingAsync(_cts.Token);
+            if (AppSettings.Instance.IsSyncPaused) return;
+            await SyncQueue!.RetryPendingAsync(_cts.Token);
+            if (_pullService is not null && !IsShuttingDown)
+                await _pullService.RunOnceAsync(_cts.Token);
         };
         _retryTimer.Start();
     }
