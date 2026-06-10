@@ -35,8 +35,10 @@ public static class PullDecision
         if (syncState == "conflict")
             return PullAction.Skip;
 
-        // 빈 스티커의 영구 pending이 pull을 막는 것 방지 — 본문 비면 dirty 아님
-        if (syncState == "pending" && !bodyEmpty)
+        // 빈 스티커의 영구 pending이 pull을 막는 것 방지 — 본문 비면 dirty 아님.
+        // 'failed'(재시도 소진)도 dirty — 미push 로컬 수정을 pull이 덮어쓰면 조용한
+        // 데이터 손실 (검증 리뷰 F1)
+        if ((syncState == "pending" || syncState == "failed") && !bodyEmpty)
             return PullAction.Skip;
 
         if (debouncePending || hasKeyboardFocus)

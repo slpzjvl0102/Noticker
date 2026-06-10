@@ -147,7 +147,12 @@ public partial class SettingsWindow : Window
         var app = AppSettings.Instance;
 
         if (app.NotionToken is not null)
+        {
             _settings.SaveToken(app.NotionToken);
+            // 토큰이 다른 integration으로 바뀌었을 수 있음 — 옛 bot id가 남으면
+            // 모든 push가 "남의 수정"으로 보여 매번 충돌 처리된다
+            App.Current.InvalidateBotUserId();
+        }
 
         if (app.TargetDbId is not null)
             _settings.Set("target_db_id", app.TargetDbId);

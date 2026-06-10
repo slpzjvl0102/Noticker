@@ -13,9 +13,14 @@ namespace Noticker.Windows;
 // 인코딩/스타일은 StickerWindow.LoadBody가 읽는 형식과 정확히 대칭 (Latin1, 마진 0, 리스트 들여쓰기 20)
 public static class RtfComposer
 {
-    public static string Compose(IReadOnlyList<NoteLine> lines)
+    // fontFamily: 스티커의 폰트 (빈 문자열이면 기본). 지정하지 않으면 FlowDocument 기본
+    // (16px/시스템 폰트)이 run 단위 \f/\fs로 RTF에 박혀 BodyBox 스타일(13px)을 이기고,
+    // 끌어온 본문만 다른 모양이 된다 (검증 리뷰 F6)
+    public static string Compose(IReadOnlyList<NoteLine> lines, string? fontFamily = null)
     {
-        var doc = new FlowDocument();
+        var doc = new FlowDocument { FontSize = 13 };
+        if (!string.IsNullOrEmpty(fontFamily))
+            doc.FontFamily = new System.Windows.Media.FontFamily(fontFamily);
 
         DocList? currentList = null;
         NoteLineKind? listKind = null;

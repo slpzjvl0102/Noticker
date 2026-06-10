@@ -168,8 +168,9 @@ public class NotionClient
         }
     }
 
-    // Queries the target DB for pages sorted by last_edited_time ascending.
-    // cursorIso null = no filter (import-list use); otherwise on_or_after filter for polling.
+    // Queries the target DB for pages sorted by last_edited_time.
+    // cursorIso null = 필터 없음 + 내림차순 (가져오기 목록 — 300건 캡이 최신부터 남도록);
+    // cursorIso 지정 = on_or_after 필터 + 오름차순 (폴링 — 커서 전진 보장).
     public async Task<List<(string PageId, string LastEditedTime, string LastEditedById, string Title)>> QueryUpdatedPagesAsync(
         string? cursorIso, CancellationToken ct)
     {
@@ -185,7 +186,8 @@ public class NotionClient
             var body = new Dictionary<string, object>
             {
                 ["page_size"] = 100,
-                ["sorts"] = new[] { new { timestamp = "last_edited_time", direction = "ascending" } }
+                ["sorts"] = new[] { new { timestamp = "last_edited_time",
+                    direction = cursorIso is null ? "descending" : "ascending" } }
             };
             if (cursorIso is not null)
                 body["filter"] = new { timestamp = "last_edited_time", last_edited_time = new { on_or_after = cursorIso } };
@@ -210,15 +212,18 @@ public class NotionClient
         return results;
     }
 
-    // Returns the page's child block array (cloned so it outlives the response document),
-    // or null if the page no longer exists (404).
-    // 단일 페이지(100블록)만 읽는다 — 스티커 규모 노트는 100블록 안에 들어간다 (수용된 제한).
-    public async Task<JsonElement?> GetPageBlocksAsync(string pageId, CancellationToken ct)
+    // Returns the page's child block array (cloned so it outlives the response document)
+    // plus has_more, or null if the page no longer exists (404).
+    // 단일 페이지(100블록)만 읽는다. HasMore=true는 호출자가 "범위 밖"으로 취급해야 한다 —
+    // 잘린 본문을 가져온 뒤 push하면 기존 삭제 경로(전체 페이지네이션)가 101번째 이후
+    // 블록을 Notion에서 파괴하는 비대칭이 생기기 때문 (검증 리뷰 발견).
+    public async Task<(JsonElement Blocks, bool HasMore)?> GetPageBlocksAsync(string pageId, CancellationToken ct)
     {
         SetAuth();
         var doc = await GetOrNullOn404Async($"/blocks/{pageId}/children?page_size=100", ct);
         if (doc is null) return null;
-        return doc.RootElement.GetProperty("results").Clone();
+        return (doc.RootElement.GetProperty("results").Clone(),
+                doc.RootElement.GetProperty("has_more").GetBoolean());
     }
 
     // Finds the title-type property on a page object and concatenates its plain_text runs.

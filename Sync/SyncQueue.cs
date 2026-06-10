@@ -9,8 +9,9 @@ public class SyncQueue
     // (stickerId, errorMessage) — subscribe in App.xaml.cs to show tray balloon
     public event Action<string, string>? SyncError;
 
-    // (stickerId, title) — push 보류 충돌 발생. App이 풍선 표시
-    public event Action<string, string>? SyncConflict;
+    // (stickerId, title, alreadyPushed) — 충돌 발생. App이 풍선 표시.
+    // alreadyPushed=true는 사후 검출(TOCTOU) — push가 이미 반영된 뒤라 "보류" 문구는 거짓
+    public event Action<string, string, bool>? SyncConflict;
 
     private readonly ConcurrentQueue<Sticker> _queue = new();
     private readonly StickerRepository _repo;
@@ -33,13 +34,20 @@ public class SyncQueue
         _signal.Release();
     }
 
+    // 창이 들고 있는 live Sticker 조회 — UI 스레드에서만 호출됨 (RetryPendingAsync는
+    // DispatcherTimer/메뉴에서 시작되고 await 재개도 dispatcher 컨텍스트)
+    public Func<string, Sticker?>? LiveStickerLookup { get; set; }
+
     public async Task RetryPendingAsync(CancellationToken ct)
     {
         var pending = _repo.GetPendingForRetry();
         foreach (var s in pending)
         {
             if (ct.IsCancellationRequested) break;
-            _queue.Enqueue(s);
+            // DB 사본 대신 live 인스턴스로 교체 — 사본에 ack/synced를 쓰면 창의
+            // 전체 행 저장(SavePosition 등)이 스테일 값으로 되돌린다 (검증 리뷰 F4)
+            var live = LiveStickerLookup?.Invoke(s.Id);
+            _queue.Enqueue(live ?? s);
             _signal.Release();
             await Task.Delay(200, ct); // stagger to avoid sync storm
         }
@@ -65,14 +73,16 @@ public class SyncQueue
     // 충돌 진입 + ack: 저장 쌍을 원격 값으로 갱신해야 다음 사용자 push가 재충돌 없이 이긴다.
     // 'conflict'는 GetPendingForRetry에서 제외됨 — 재시도 폭주/풍선 스팸 없음.
     // 다음 키 입력 시 SaveContent가 'pending'으로 덮어 해소
-    private void MarkConflict(Sticker s, string remoteTime, string remoteBy)
+    private void MarkConflict(Sticker s, string remoteTime, string remoteBy, bool alreadyPushed)
     {
-        s.SyncState = "conflict";
-        _repo.UpdateSyncState(s.Id, "conflict", s.NotionPageId, s.RetryCount);
+        // ack를 먼저 — 중간에 죽어도 "conflict인데 ack 없음"(재충돌 루프)이 아니라
+        // "ack만 됨"(무해)으로 남는다
         s.NotionLastEdit = remoteTime;
         s.NotionLastEditBy = remoteBy;
         _repo.UpdateNotionLastEdit(s.Id, remoteTime, remoteBy);
-        SyncConflict?.Invoke(s.Id, s.Title);
+        s.SyncState = "conflict";
+        _repo.UpdateSyncState(s.Id, "conflict", s.NotionPageId, s.RetryCount);
+        SyncConflict?.Invoke(s.Id, s.Title, alreadyPushed);
     }
 
     private async Task ProcessAsync(Sticker s, CancellationToken ct)
@@ -106,7 +116,7 @@ public class SyncQueue
                     if (PullDecision.IsPushConflict(pre.Value.LastEditedTime, pre.Value.LastEditedById,
                             s.NotionLastEdit, s.NotionLastEditBy, botId))
                     {
-                        MarkConflict(s, pre.Value.LastEditedTime, pre.Value.LastEditedById);
+                        MarkConflict(s, pre.Value.LastEditedTime, pre.Value.LastEditedById, alreadyPushed: false);
                         return;
                     }
                 }
@@ -123,7 +133,7 @@ public class SyncQueue
                 {
                     if (post.Value.LastEditedById != bot)
                     {
-                        MarkConflict(s, post.Value.LastEditedTime, post.Value.LastEditedById);
+                        MarkConflict(s, post.Value.LastEditedTime, post.Value.LastEditedById, alreadyPushed: true);
                         return;
                     }
                     s.NotionLastEdit = post.Value.LastEditedTime;

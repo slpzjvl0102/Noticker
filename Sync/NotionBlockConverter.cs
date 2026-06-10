@@ -42,6 +42,39 @@ public static class NotionBlockConverter
         return (true, null);
     }
 
+    // 가져오기 경고용 — 페이지에 서식 annotation(굵게/밑줄/기타)이 하나라도 있는가.
+    // push가 annotation을 보내지 못하므로(plain text만), 서식 있는 페이지를 가져온 뒤
+    // 스티커를 수정하면 Notion 쪽 서식이 벗겨진다 — 동의가 필요한 손실 (검증 리뷰 F3)
+    public static bool HasAnnotations(JsonElement blocksArray)
+    {
+        if (blocksArray.ValueKind != JsonValueKind.Array) return false;
+
+        foreach (var block in blocksArray.EnumerateArray())
+        {
+            var type = TryGetProp(block, "type", out var t) && t.ValueKind == JsonValueKind.String
+                ? t.GetString()
+                : null;
+            if (type is null || !TryGetProp(block, type, out var payload) ||
+                !TryGetProp(payload, "rich_text", out var richText) ||
+                richText.ValueKind != JsonValueKind.Array)
+                continue;
+
+            foreach (var rt in richText.EnumerateArray())
+            {
+                if (!TryGetProp(rt, "annotations", out var ann)) continue;
+                foreach (var flag in new[] { "bold", "italic", "strikethrough", "underline", "code" })
+                {
+                    if (TryGetProp(ann, flag, out var v) && v.ValueKind == JsonValueKind.True)
+                        return true;
+                }
+                if (TryGetProp(ann, "color", out var c) && c.ValueKind == JsonValueKind.String &&
+                    c.GetString() is string color && color != "default")
+                    return true;
+            }
+        }
+        return false;
+    }
+
     // Converts a block array into lines of formatted runs (one run per rich_text element).
     // Empty rich_text → line with zero runs. Blocks outside the vocabulary are skipped
     // defensively (CheckVocabulary is expected to have run first).
@@ -123,15 +156,18 @@ public static class NotionBlockConverter
     }
 
     // Pull responses carry plain_text on every rich_text element; fall back to text.content.
+    // Notion의 soft line break(shift+enter)는 plain_text 안의 '\n'으로 옴 — 그대로 두면
+    // 다음 push가 한 블록을 둘로 쪼갠다 (구조 변형) → 공백으로 평탄화
     private static string ExtractText(JsonElement richText)
     {
+        string raw = "";
         if (TryGetProp(richText, "plain_text", out var pt) && pt.ValueKind == JsonValueKind.String)
-            return pt.GetString() ?? "";
-        if (TryGetProp(richText, "text", out var textObj) &&
-            TryGetProp(textObj, "content", out var content) &&
-            content.ValueKind == JsonValueKind.String)
-            return content.GetString() ?? "";
-        return "";
+            raw = pt.GetString() ?? "";
+        else if (TryGetProp(richText, "text", out var textObj) &&
+                 TryGetProp(textObj, "content", out var content) &&
+                 content.ValueKind == JsonValueKind.String)
+            raw = content.GetString() ?? "";
+        return raw.Replace('\n', ' ');
     }
 
     // JsonElement.TryGetProperty throws on non-object elements — guard ValueKind first.

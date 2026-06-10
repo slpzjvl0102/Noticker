@@ -41,7 +41,9 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Border x:Name="RowBorder" Padding="12,8" BorderThickness="0,0,0,1">
+                    <!-- 구분선/날짜 색은 양 테마에서 읽히는 중간값 고정 (#50808080 / #AAAAAA) -->
+                    <Border x:Name="RowBorder" Padding="12,8" BorderThickness="0,0,0,1"
+                            BorderBrush="#50808080">
                         <StackPanel>
                             <TextBlock x:Name="TitleLabel"
                                        Text="{Binding Title}"
@@ -49,6 +51,7 @@
                                        FontSize="12"/>
                             <TextBlock x:Name="DateLabel"
                                        Text="{Binding DateLabel}"
+                                       Foreground="#AAAAAA"
                                        FontSize="10" Margin="0,3,0,0"/>
                         </StackPanel>
                     </Border>

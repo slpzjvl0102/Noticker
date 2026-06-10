@@ -75,12 +75,24 @@ public partial class NotionImportWindow : Window
 
     private async void PageList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_importing || PageList.SelectedItem is not ImportItem item) return;
+        if (_importing)
+        {
+            // 가져오기 진행 중의 클릭도 선택을 비워야 같은 행을 다시 클릭할 수 있음
+            PageList.SelectedItem = null;
+            return;
+        }
+        if (PageList.SelectedItem is not ImportItem item) return;
         PageList.SelectedItem = null;
         _importing = true;
         try
         {
             await ImportAsync(item);
+        }
+        catch (Exception)
+        {
+            // async void에서 새는 예외는 프로세스를 죽임 (오프라인 HttpRequestException 등)
+            MessageBox.Show("가져오기 실패 — 연결 상태를 확인하세요.",
+                "가져오기 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -90,34 +102,50 @@ public partial class NotionImportWindow : Window
 
     private async Task ImportAsync(ImportItem item)
     {
-        var blocks = await _client.GetPageBlocksAsync(item.PageId, CancellationToken.None);
-        if (blocks is null)
+        var result0 = await _client.GetPageBlocksAsync(item.PageId, CancellationToken.None);
+        if (result0 is null)
         {
             MessageBox.Show("페이지를 읽을 수 없습니다 (삭제되었거나 권한 없음).",
                 "가져오기 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        var (blocks, hasMore) = result0.Value;
 
-        var (supported, unsupportedType) = NotionBlockConverter.CheckVocabulary(blocks.Value);
+        var (supported, unsupportedType) = NotionBlockConverter.CheckVocabulary(blocks);
         bool pullDisabled = false;
-        if (!supported)
+        if (!supported || hasMore)
         {
-            // 범위 밖 서식 경고 — 동의해야 진행 (설계 premise 4, 사용자 확정 요구사항)
+            // 범위 밖 서식/100블록 초과 경고 — 동의해야 진행 (설계 premise 4).
+            // 100블록 초과는 잘린 본문을 push할 때 Notion의 초과 블록이 파괴되는 비대칭
+            var reason = hasMore ? "100블록 초과" : unsupportedType;
             var result = MessageBox.Show(
-                $"이 페이지에는 지원되지 않는 서식이 있습니다 ({unsupportedType}).\n" +
+                $"이 페이지에는 지원되지 않는 내용이 있습니다 ({reason}).\n" +
                 "지원되는 텍스트만 가져오며, 이후 스티커를 수정하는 순간 " +
-                "Notion의 원본 서식이 삭제됩니다.\n\n계속할까요?",
+                "Notion의 원본 내용이 스티커 내용으로 대체됩니다.\n\n계속할까요?",
                 "서식 경고", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;
             pullDisabled = true;   // 이후 pull로 재훼손 방지
         }
+        else if (NotionBlockConverter.HasAnnotations(blocks))
+        {
+            // 블록 종류는 지원 범위지만 서식 annotation이 있음 — push가 annotation을
+            // 보내지 못해(plain text) 스티커를 수정하면 Notion 쪽 서식이 벗겨진다.
+            // 같은 손실 클래스이므로 같은 동의 게이트 (pull은 계속 허용)
+            var result = MessageBox.Show(
+                "이 페이지에는 글자 서식(굵게/밑줄/색상 등)이 있습니다.\n" +
+                "가져온 뒤 스티커를 수정하면 Notion 쪽 글자 서식이 사라질 수 있습니다.\n\n계속할까요?",
+                "서식 경고", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes) return;
+        }
 
-        var lines = NotionBlockConverter.ToLines(blocks.Value);
+        var lines = NotionBlockConverter.ToLines(blocks);
         var plain = NotionBlockConverter.ToPlainText(lines);
         var rtf = RtfComposer.Compose(lines);
 
+        // RawTitle 사용 — DisplayTitle("(제목 없음)")을 저장하면 첫 push가 Notion 페이지
+        // 제목을 placeholder로 바꿔버린다 (검증 리뷰 F4)
         App.Current.CreateImportedSticker(
-            item.Title, plain, rtf, item.PageId, item.LastEditedTime, item.LastEditedById, pullDisabled);
+            item.RawTitle, plain, rtf, item.PageId, item.LastEditedTime, item.LastEditedById, pullDisabled);
 
         // 목록에서 제거
         if (PageList.ItemsSource is List<ImportItem> list)
@@ -132,8 +160,9 @@ public partial class NotionImportWindow : Window
         }
     }
 
+    // Title은 표시용, RawTitle은 저장용 — placeholder가 데이터로 새지 않도록 분리
     private record ImportItem(string PageId, string LastEditedTime, string LastEditedById,
-        string Title, string DateLabel)
+        string RawTitle, string Title, string DateLabel)
     {
         public static ImportItem From(string pageId, string lastEditedTime, string lastEditedBy, string title)
         {
@@ -141,7 +170,7 @@ public partial class NotionImportWindow : Window
             var dateLabel = DateTime.TryParse(lastEditedTime, out var dt)
                 ? dt.ToLocalTime().ToString("yyyy년 M월 d일 HH:mm")
                 : "";
-            return new ImportItem(pageId, lastEditedTime, lastEditedBy, displayTitle, dateLabel);
+            return new ImportItem(pageId, lastEditedTime, lastEditedBy, title, displayTitle, dateLabel);
         }
     }
 }

@@ -51,9 +51,10 @@ public class PullService
             var cursor = _settingsRepo.Get("notion_last_poll");
             if (cursor is null)
             {
-                // 첫 가동: now로 초기화 — 전체 DB를 쏟아붓지 않고 이후 수정분부터 받는다
+                // 첫 가동: now-5분으로 초기화 — 전체 DB를 쏟아붓지 않으면서 로컬 시계가
+                // 서버보다 빠른 경우의 누락 창을 마진으로 흡수 (중복 수신은 쌍 dedupe가 무해화)
                 _settingsRepo.Set("notion_last_poll",
-                    DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
+                    DateTime.UtcNow.AddMinutes(-5).ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
                 return;
             }
 
@@ -75,16 +76,24 @@ public class PullService
 
             int applied = 0;
             string maxProcessed = cursor;
-            bool deferred = false;
+            // 일시적 dirty(타이핑/debounce/pending)를 만나면 커서만 동결하고 루프는 계속 —
+            // 한 스티커가 전체 pull을 막는 head-of-line blocking 방지 (검증 리뷰 F4).
+            // 이미 적용된 뒤쪽 페이지는 다음 사이클에 (쌍 dedupe로) terminal no-op
+            bool cursorFrozen = false;
+            void Advance(string time)
+            {
+                if (!cursorFrozen)
+                    maxProcessed = PullDecision.NextCursor(maxProcessed, [time]);
+            }
 
             foreach (var p in pages)
             {
-                if (ct.IsCancellationRequested || deferred) break;
+                if (ct.IsCancellationRequested) break;
 
                 if (!byPageId.TryGetValue(p.PageId, out var hit))
                 {
                     // 미연결 페이지 — terminal (가져오기는 ImportWindow 경유로만)
-                    maxProcessed = PullDecision.NextCursor(maxProcessed, [p.LastEditedTime]);
+                    Advance(p.LastEditedTime);
                     continue;
                 }
 
@@ -100,60 +109,90 @@ public class PullService
                 {
                     case PullAction.AckOnly:
                         Ack(s, p);
-                        maxProcessed = PullDecision.NextCursor(maxProcessed, [p.LastEditedTime]);
+                        Advance(p.LastEditedTime);
                         break;
 
                     case PullAction.Skip:
-                        // dedupe/pull_disabled는 terminal, dirty(pending/conflict/debounce/focus)는 defer
-                        bool terminal = s.PullDisabled ||
-                            (p.LastEditedTime == s.NotionLastEdit && p.LastEditedById == s.NotionLastEditBy);
+                        // terminal: dedupe / pull_disabled / 영구 dirty(conflict·failed —
+                        //   conflict는 ack해서 다음 push가 재충돌 없이 이기고, failed는 사용자가
+                        //   수정해 pending으로 돌아올 때까지 보존. defer로 두면 영원히 안 풀리는
+                        //   상태가 앱 전체 커서를 정지시킴 — 검증 리뷰 F2/F1)
+                        // defer: 일시적 dirty(pending/debounce/focus) — 커서 동결, 다음 사이클 재시도
+                        bool pairEqual = p.LastEditedTime == s.NotionLastEdit &&
+                                         p.LastEditedById == s.NotionLastEditBy;
+                        if (s.SyncState == "conflict" && !pairEqual)
+                            Ack(s, p);
+                        bool terminal = s.PullDisabled || pairEqual ||
+                            s.SyncState == "conflict" || s.SyncState == "failed";
                         if (terminal)
-                            maxProcessed = PullDecision.NextCursor(maxProcessed, [p.LastEditedTime]);
+                            Advance(p.LastEditedTime);
                         else
-                            deferred = true;            // 커서 보류 — 다음 사이클 재시도
+                            cursorFrozen = true;
                         break;
 
                     case PullAction.Apply:
-                        if (applied >= MaxAppliesPerCycle) { deferred = true; break; }
+                        if (applied >= MaxAppliesPerCycle)
+                        {
+                            // 적용 상한 — 추가 blocks GET 없이 종료, 커서가 진행을 보장
+                            cursorFrozen = true;
+                            goto DonePolling;
+                        }
 
                         await Task.Delay(350, ct);      // 오프라인 복귀 burst의 rate limit 페이싱
-                        var blocks = await _client.GetPageBlocksAsync(p.PageId, ct);
-                        if (blocks is null)
+                        var result = await _client.GetPageBlocksAsync(p.PageId, ct);
+                        if (result is null)
                         {
                             // 404 — push의 기존 재생성 정책에 맡김
-                            maxProcessed = PullDecision.NextCursor(maxProcessed, [p.LastEditedTime]);
+                            Advance(p.LastEditedTime);
                             break;
                         }
 
-                        var (supported, _) = NotionBlockConverter.CheckVocabulary(blocks.Value);
-                        if (!supported)
+                        // 가드 재검사 — 위 Decide와 여기 사이의 await 동안 메시지 펌프가
+                        // 사용자 입력을 처리했을 수 있음. 스테일 가드로 적용하면 그 사이의
+                        // 키 입력이 클로버됨 (검증 리뷰 critical F1)
+                        if (win.IsKeyboardFocusWithin || win.IsSyncPending ||
+                            s.SyncState is "pending" or "conflict")
                         {
-                            // 범위 밖 — pull 영구 중단 + ack (같은 페이지 재검사 루프 방지)
+                            cursorFrozen = true;
+                            continue;
+                        }
+
+                        var (supported, _) = NotionBlockConverter.CheckVocabulary(result.Value.Blocks);
+                        if (!supported || result.Value.HasMore)
+                        {
+                            // 범위 밖 또는 100블록 초과(잘린 본문을 push하면 Notion 쪽
+                            // 초과 블록이 파괴됨) — pull 영구 중단 + ack
                             s.PullDisabled = true;
                             _repo.SetPullDisabled(s.Id, true);
                             Ack(s, p);
-                            maxProcessed = PullDecision.NextCursor(maxProcessed, [p.LastEditedTime]);
+                            Advance(p.LastEditedTime);
                             break;
                         }
 
-                        var lines = NotionBlockConverter.ToLines(blocks.Value);
+                        var lines = NotionBlockConverter.ToLines(result.Value.Blocks);
                         var plain = NotionBlockConverter.ToPlainText(lines);
-                        var rtf = RtfComposer.Compose(lines);
+                        var rtf = RtfComposer.Compose(lines, s.FontFamily);
                         // 쌍을 먼저 갱신 — ApplyPulledContent의 repo.Update가 함께 영속
                         s.NotionLastEdit = p.LastEditedTime;
                         s.NotionLastEditBy = p.LastEditedById;
                         win.ApplyPulledContent(p.Title, plain, rtf);
                         _notify(p.Title, "Notion에서 갱신됨");
                         applied++;
-                        maxProcessed = PullDecision.NextCursor(maxProcessed, [p.LastEditedTime]);
+                        Advance(p.LastEditedTime);
                         break;
                 }
             }
+            DonePolling:
 
             if (maxProcessed != cursor)
                 _settingsRepo.Set("notion_last_poll", maxProcessed);
         }
         catch (OperationCanceledException) { }
+        catch (NotionUnauthorizedException)
+        {
+            // push 경로와 동일한 처우 — 401은 조용히 매분 재시도하면 안 됨
+            _settings.IsSyncPaused = true;
+        }
         catch { /* 오프라인 등 — 다음 사이클 재시도 (코드베이스의 silent-catch 어법) */ }
         finally
         {

@@ -2,6 +2,30 @@ using Noticker.Sync;
 
 namespace Noticker.Tests;
 
+// 'failed'(재시도 소진) = dirty — 미push 로컬 수정을 pull이 덮어쓰면 조용한 데이터 손실 (검증 리뷰 F1)
+public class PullDecisionFailedStateTests
+{
+    private static readonly PageMeta Page = new("pg", "2026-06-11T01:00:00.000Z", "human-1", "T");
+
+    [Fact]
+    public void Decide_FailedWithBody_Skips()
+    {
+        var action = PullDecision.Decide(Page, "bot-1", "2026-06-10T00:00:00.000Z", "human-1",
+            syncState: "failed", bodyEmpty: false,
+            debouncePending: false, hasKeyboardFocus: false, pullDisabled: false);
+        Assert.Equal(PullAction.Skip, action);
+    }
+
+    [Fact]
+    public void Decide_FailedWithEmptyBody_Applies()
+    {
+        var action = PullDecision.Decide(Page, "bot-1", "2026-06-10T00:00:00.000Z", "human-1",
+            syncState: "failed", bodyEmpty: true,
+            debouncePending: false, hasKeyboardFocus: false, pullDisabled: false);
+        Assert.Equal(PullAction.Apply, action);
+    }
+}
+
 public class PullDecisionTests
 {
     private const string Bot = "bot-user-id";

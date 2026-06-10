@@ -60,6 +60,7 @@ public partial class App : System.Windows.Application
         SyncQueue = new SyncQueue(StickerRepo!, _notionClient, AppSettings.Instance);
         SyncQueue.SyncError += OnSyncError;
         SyncQueue.SyncConflict += OnSyncConflict;
+        SyncQueue.LiveStickerLookup = id => _stickerWindows.TryGetValue(id, out var w) ? w.Sticker : null;
         _ = EnsureBotUserIdAsync();   // 덮어쓰기 보호/pull의 전제 — 실패해도 앱 동작엔 영향 없음
 
         _pullService = new PullService(StickerRepo!, SettingsRepo!, _notionClient,
@@ -472,6 +473,7 @@ public partial class App : System.Windows.Application
         _retryTimer.Tick += async (_, _) =>
         {
             if (AppSettings.Instance.IsSyncPaused) return;
+            await EnsureBotUserIdAsync();   // 오프라인 시작 후 복구 — 캐시되면 즉시 반환
             await SyncQueue!.RetryPendingAsync(_cts.Token);
             if (_pullService is not null && !IsShuttingDown)
                 await _pullService.RunOnceAsync(_cts.Token);
@@ -494,19 +496,34 @@ public partial class App : System.Windows.Application
         catch { /* 다음 실행에서 재시도 */ }
     }
 
-    private void OnSyncConflict(string stickerId, string title)
+    private void OnSyncConflict(string stickerId, string title, bool alreadyPushed)
     {
         Dispatcher.InvokeAsync(() =>
         {
             if (IsShuttingDown) return;
             var label = string.IsNullOrWhiteSpace(title) ? "(제목 없음)" : title;
+            // 사후 검출(TOCTOU)은 push가 이미 반영된 뒤 — "보류" 문구는 거짓이 됨
+            var msg = alreadyPushed
+                ? $"'{label}' — push가 Notion 수정과 겹침, 스티커 버전이 반영됨"
+                : $"'{label}' — Notion에서 수정됨, push 보류";
             try
             {
-                _trayIcon?.ShowBalloonTip(6000, "Noticker — 동기화 충돌",
-                    $"'{label}' — Notion에서 수정됨, push 보류", ToolTipIcon.Warning);
+                _trayIcon?.ShowBalloonTip(6000, "Noticker — 동기화 충돌", msg, ToolTipIcon.Warning);
             }
             catch (ObjectDisposedException) { }
+            // 충돌 점/툴팁 즉시 반영 (백그라운드 전이는 UI 갱신 트리거가 없음)
+            if (_stickerWindows.TryGetValue(stickerId, out var win))
+                win.RefreshSyncIndicator();
         });
+    }
+
+    // 토큰이 교체되면 bot id도 무효 — 옛 봇 id로는 모든 push가 "남의 수정"으로 보여
+    // 매번 충돌이 난다. SettingsWindow가 토큰 저장 시 호출
+    public void InvalidateBotUserId()
+    {
+        AppSettings.Instance.NotionBotUserId = null;
+        try { SettingsRepo!.Delete("notion_bot_user_id"); } catch { }
+        _ = EnsureBotUserIdAsync();
     }
 
     private void OnSyncError(string stickerId, string message)

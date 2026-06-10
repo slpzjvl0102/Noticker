@@ -22,6 +22,13 @@
 - [ ] **DESIGN.md 작성** (S, P3)
   - What: /design-consultation 실행해 디자인 토큰 문서화
   - Why: 현재 토큰이 StickerWindow.xaml에 암묵적으로만 존재 — 리뷰마다 재추출 중
+- [ ] **push 서식 annotation 지원 (rich_text bold/underline)** (M, P2)
+  - What: push가 plain text 대신 run 구조(굵게/밑줄)를 rich_text annotation으로 전송
+  - Why: 현재 push는 서식을 벗기므로, 서식 있는 스티커가 pull을 거치면 로컬 서식도
+    사라지는 비대칭 (검증 리뷰 F2). 가져오기 경고로 동의는 받지만 근본 해결은 push 개선
+  - Context: SaveBodyContent가 UI 스레드에서 문서를 이미 순회함 — 그 시점에 NoteLine
+    구조를 직렬화해 두면 백그라운드 push가 annotation 포함 블록을 만들 수 있음
+  - Depends on: 양방향 v1 실사용 확인
 - [ ] **글로벌 hotkey로 스티커 생성** (M, P2)
   - What: 시스템 전역 단축키 → 새 스티커
   - Why: CEO 리뷰 지적 — capture 도구의 최고 레버리지 기능이 두 계획 연속 제외됨

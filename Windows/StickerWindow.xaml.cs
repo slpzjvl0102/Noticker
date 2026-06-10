@@ -34,6 +34,9 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     // pull의 dirty 가드용 — debounce 대기 중이면 pull이 이 스티커를 건너뜀
     public bool IsSyncPending => _debounce.IsPending;
 
+    // 백그라운드 sync 전이(conflict 등) 후 App이 dispatcher에서 점/툴팁 갱신용으로 호출
+    public void RefreshSyncIndicator() => UpdateSyncIndicator();
+
     public event PropertyChangedEventHandler? PropertyChanged;
     private void Notify(string name) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
