@@ -30,7 +30,8 @@ public partial class NoteListWindow : Window
         MutedFg: new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99)),
         BadgeBg: new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0)),
         BadgeFg: new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
-        LineBorder: new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)));
+        LineBorder: new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD)),
+        ImportFg: new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55)));
 
     private static readonly ThemePalette _darkPalette = new(
         WinBg: new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
@@ -41,7 +42,8 @@ public partial class NoteListWindow : Window
         MutedFg: new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
         BadgeBg: new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x4A)),
         BadgeFg: new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
-        LineBorder: new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50)));
+        LineBorder: new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x50)),
+        ImportFg: new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)));
 
     private static readonly DropShadowEffect _hoverShadow = new()
     {
@@ -54,7 +56,8 @@ public partial class NoteListWindow : Window
     {
         foreach (var p in new[] { _lightPalette, _darkPalette })
             foreach (var b in new[] { p.WinBg, p.CardBg, p.CardBorder, p.HoverBorder,
-                                      p.TitleFg, p.MutedFg, p.BadgeBg, p.BadgeFg, p.LineBorder })
+                                      p.TitleFg, p.MutedFg, p.BadgeBg, p.BadgeFg, p.LineBorder,
+                                      p.ImportFg })
                 if (b.CanFreeze) b.Freeze();
         if (_hoverShadow.CanFreeze) _hoverShadow.Freeze();
     }
@@ -91,7 +94,7 @@ public partial class NoteListWindow : Window
         SearchBox.CaretBrush = p.TitleFg;
         SearchPlaceholder.Foreground = p.MutedFg;
         EmptyLabel.Foreground = p.MutedFg;
-        ImportButton.Foreground = p.MutedFg;
+        ImportButton.Foreground = p.ImportFg;
         ImportButton.BorderBrush = p.CardBorder;
 
         // 카드 브러시는 아이템에 박혀 있어 재생성 필요
@@ -214,7 +217,8 @@ public partial class NoteListWindow : Window
 
     private record ThemePalette(
         Brush WinBg, Brush CardBg, Brush CardBorder, Brush HoverBorder,
-        Brush TitleFg, Brush MutedFg, Brush BadgeBg, Brush BadgeFg, Brush LineBorder);
+        Brush TitleFg, Brush MutedFg, Brush BadgeBg, Brush BadgeFg, Brush LineBorder,
+        Brush ImportFg);
 
     private record NoteItem(
         string Id, string Title, string DateLabel, string IsHiddenBadge,
