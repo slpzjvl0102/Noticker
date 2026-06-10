@@ -184,6 +184,40 @@
                 <CheckBox x:Name="ColorSwapCheck" Content="색상 Swap (흑↔백)"/>
                 <CheckBox x:Name="AutostartCheck" Content="Windows 시작 시 자동 실행"/>
 
+                <!-- Pomodoro -->
+                <TextBlock Text="포모도로" Style="{StaticResource SectionHeadingStyle}"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="집중 시간 (분, 1-120)"
+                               Style="{StaticResource FieldLabelStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="짧은 휴식 (분, 1-60)"
+                               Style="{StaticResource FieldLabelStyle}"/>
+                    <TextBox Grid.Row="1" Grid.Column="0" x:Name="PomFocusBox"/>
+                    <TextBox Grid.Row="1" Grid.Column="2" x:Name="PomShortBox"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="긴 휴식 (분, 1-60)"
+                               Style="{StaticResource FieldLabelStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="긴 휴식 간격 (세션, 1-12)"
+                               Style="{StaticResource FieldLabelStyle}"/>
+                    <TextBox Grid.Row="3" Grid.Column="0" x:Name="PomLongBox"/>
+                    <TextBox Grid.Row="3" Grid.Column="2" x:Name="PomIntervalBox"/>
+                </Grid>
+
+                <CheckBox x:Name="PomAutoStartCheck" Content="다음 세션 자동 시작"/>
+                <CheckBox x:Name="PomSoundCheck" Content="세션 종료 사운드"/>
+
                 <Separator Background="#EEEEEE" Margin="0,8,0,16"/>
 
                 <!-- Save button -->

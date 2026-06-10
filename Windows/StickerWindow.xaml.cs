@@ -281,6 +281,11 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         BodyBox.Focus();
     }
 
+    private void PomodoroButton_Click(object sender, RoutedEventArgs e)
+    {
+        App.Current.OpenPomodoro();
+    }
+
     private void BodyBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Space) return;

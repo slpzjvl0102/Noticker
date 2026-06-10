@@ -371,6 +371,26 @@
                         <TextBlock Text="1." FontSize="11"
                                    Foreground="{Binding TitleForeground}"/>
                     </ToggleButton>
+
+                    <!-- 구분선 — 문자 서식 그룹과 런처 분리 -->
+                    <Rectangle Width="1" Height="14" Fill="#50808080" Margin="6,0"/>
+
+                    <!-- Pomodoro launcher — 시계 글리프 (Path 아이콘 어법, 이모지 금지) -->
+                    <Button x:Name="PomodoroButton"
+                            Style="{StaticResource DeleteButtonStyle}"
+                            Width="22" Height="22" Margin="2,0"
+                            ToolTip="포모도로 타이머"
+                            AutomationProperties.Name="포모도로 타이머"
+                            Click="PomodoroButton_Click">
+                        <Canvas Width="12" Height="12">
+                            <Ellipse Width="11" Height="11" Canvas.Left="0.5" Canvas.Top="0.5"
+                                     Stroke="{Binding TitleForeground}" StrokeThickness="1.2"/>
+                            <Line X1="6" Y1="6" X2="6" Y2="2.5"
+                                  Stroke="{Binding TitleForeground}" StrokeThickness="1.2"/>
+                            <Line X1="6" Y1="6" X2="8.5" Y2="6"
+                                  Stroke="{Binding TitleForeground}" StrokeThickness="1.2"/>
+                        </Canvas>
+                    </Button>
                 </StackPanel>
             </Grid>
 

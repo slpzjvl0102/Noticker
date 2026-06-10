@@ -37,6 +37,13 @@ public partial class SettingsWindow : Window
         ColorSwapCheck.IsChecked = app.ColorSwapped;
         AutostartCheck.IsChecked = app.AutostartEnabled;
 
+        PomFocusBox.Text = app.PomodoroFocusMinutes.ToString();
+        PomShortBox.Text = app.PomodoroShortBreakMinutes.ToString();
+        PomLongBox.Text = app.PomodoroLongBreakMinutes.ToString();
+        PomIntervalBox.Text = app.PomodoroLongBreakInterval.ToString();
+        PomAutoStartCheck.IsChecked = app.PomodoroAutoStart;
+        PomSoundCheck.IsChecked = app.PomodoroSound;
+
         var cats = app.CategoryOptions;
         CatStatusText.Text = cats.Count > 0
             ? $"{cats.Count}개 옵션 캐시됨"
@@ -121,6 +128,18 @@ public partial class SettingsWindow : Window
             : CategoryPropertyBox.Text.Trim();
         app.ColorSwapped = ColorSwapCheck.IsChecked == true;
         app.AutostartEnabled = AutostartCheck.IsChecked == true;
+
+        // 입력 클램프 — LoadInto와 같은 ParseClamped 사용 (규칙 한 곳 정의)
+        app.PomodoroFocusMinutes = AppSettings.ParseClamped(PomFocusBox.Text,
+            AppSettings.PomodoroFocusDefault, AppSettings.PomodoroFocusMin, AppSettings.PomodoroFocusMax);
+        app.PomodoroShortBreakMinutes = AppSettings.ParseClamped(PomShortBox.Text,
+            AppSettings.PomodoroShortBreakDefault, AppSettings.PomodoroBreakMin, AppSettings.PomodoroBreakMax);
+        app.PomodoroLongBreakMinutes = AppSettings.ParseClamped(PomLongBox.Text,
+            AppSettings.PomodoroLongBreakDefault, AppSettings.PomodoroBreakMin, AppSettings.PomodoroBreakMax);
+        app.PomodoroLongBreakInterval = AppSettings.ParseClamped(PomIntervalBox.Text,
+            AppSettings.PomodoroIntervalDefault, AppSettings.PomodoroIntervalMin, AppSettings.PomodoroIntervalMax);
+        app.PomodoroAutoStart = PomAutoStartCheck.IsChecked == true;
+        app.PomodoroSound = PomSoundCheck.IsChecked == true;
     }
 
     private void PersistSettings()
@@ -136,6 +155,16 @@ public partial class SettingsWindow : Window
         _settings.Set("category_property_name", app.CategoryPropertyName);
         _settings.Set("color_swapped", app.ColorSwapped ? "true" : "false");
         _settings.Set("autostart_enabled", app.AutostartEnabled ? "true" : "false");
+
+        _settings.Set("pomodoro_focus_min", app.PomodoroFocusMinutes.ToString());
+        _settings.Set("pomodoro_short_break_min", app.PomodoroShortBreakMinutes.ToString());
+        _settings.Set("pomodoro_long_break_min", app.PomodoroLongBreakMinutes.ToString());
+        _settings.Set("pomodoro_long_break_interval", app.PomodoroLongBreakInterval.ToString());
+        _settings.Set("pomodoro_auto_start", app.PomodoroAutoStart ? "true" : "false");
+        _settings.Set("pomodoro_sound", app.PomodoroSound ? "true" : "false");
+
+        // AppSettings → 서비스 복사 (현재 세션은 스냅샷 유지, 다음 세션부터 적용)
+        App.Current.RefreshPomodoroSettings();
 
         // Autostart registry
         var exePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
