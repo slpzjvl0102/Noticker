@@ -597,7 +597,7 @@ public partial class App : System.Windows.Application
             // 사후 검출(TOCTOU)은 push가 이미 반영된 뒤 — "보류" 문구는 거짓이 됨
             var msg = alreadyPushed
                 ? $"'{label}' — push가 Notion 수정과 겹침, 스티커 버전이 반영됨"
-                : $"'{label}' — Notion에서 수정됨, push 보류";
+                : $"'{label}' — Notion에서 편집 중입니다. 동기화를 잠시 보류했어요";
             try
             {
                 _trayIcon?.ShowBalloonTip(6000, "Noticker — 동기화 충돌", msg, ToolTipIcon.Warning);
