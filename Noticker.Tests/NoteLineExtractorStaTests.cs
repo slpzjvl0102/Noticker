@@ -107,6 +107,46 @@ public class NoteLineExtractorStaTests
     }
 
     [Fact]
+    public void LineBreak_BecomesNewlineInRunText()
+    {
+        RunSta(() =>
+        {
+            var doc = new FlowDocument();
+            var p = new Paragraph { Margin = new Thickness(0) };
+            p.Inlines.Add(new Run("abc"));
+            p.Inlines.Add(new LineBreak());
+            p.Inlines.Add(new Run("def"));
+            doc.Blocks.Add(p);
+
+            var lines = NoteLineExtractor.Extract(doc);
+
+            Assert.Single(lines);
+            Assert.Equal("abc\ndef", string.Concat(lines[0].Runs.Select(r => r.Text)));
+        });
+    }
+
+    [Fact]
+    public void SpanLevelFormatting_PropagatesToChildRuns()
+    {
+        RunSta(() =>
+        {
+            var doc = new FlowDocument();
+            var p = new Paragraph { Margin = new Thickness(0) };
+            var underlineSpan = new Span(new Run("밑줄텍스트")) { TextDecorations = TextDecorations.Underline };
+            var boldSpan = new Bold(new Run("굵은텍스트"));
+            p.Inlines.Add(underlineSpan);
+            p.Inlines.Add(boldSpan);
+            doc.Blocks.Add(p);
+
+            var lines = NoteLineExtractor.Extract(doc);
+
+            Assert.Single(lines);
+            Assert.Contains(lines[0].Runs, r => r.Text == "밑줄텍스트" && r.Underline && !r.Bold);
+            Assert.Contains(lines[0].Runs, r => r.Text == "굵은텍스트" && r.Bold && !r.Underline);
+        });
+    }
+
+    [Fact]
     public void EmptyDocument_ExtractsToZeroLines()
     {
         RunSta(() =>

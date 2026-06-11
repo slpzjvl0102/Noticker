@@ -31,10 +31,11 @@ public static class NoteLineExtractor
             }
         }
 
-        // plain(Body) 경로의 TrimEnd('\n')와 대칭 — 뒤쪽 빈 줄은 블록으로 가지 않는다.
+        // plain(Body) 경로의 TrimEnd('\n')와 대칭 — 뒤쪽 빈 paragraph 줄만 제거.
         // 특히 빈 문서가 [빈 paragraph 1줄]로 추출되면 plain 경로(블록 0개)와 달리
-        // Notion에 빈 블록이 생긴다 (Task 3 리뷰 발견)
-        while (lines.Count > 0 && lines[^1].Runs.Count == 0)
+        // Notion에 빈 블록이 생긴다 (Task 3 리뷰 발견).
+        // 빈 리스트 항목은 plain 경로가 "• " 줄로 블록을 보내므로 패리티를 위해 보존
+        while (lines.Count > 0 && lines[^1].Kind == NoteLineKind.Paragraph && lines[^1].Runs.Count == 0)
             lines.RemoveAt(lines.Count - 1);
         return lines;
     }
@@ -90,6 +91,12 @@ public static class NoteLineExtractor
                             td.Any(d => d.Location == TextDecorationLocation.Underline));
                     runs.Add(new NoteRun(run.Text, bold, underline));
                     break;
+                case LineBreak:
+                    // Shift+Enter 소프트 브레이크 — Notion rich_text는 content 안의 '\n'을
+                    // 소프트 브레이크로 렌더링한다. (pull 쪽은 기존 정책대로 '\n'을 공백 평탄화 —
+                    // NotionBlockConverter.ExtractText 주석 참고)
+                    runs.Add(new NoteRun("\n", inheritedBold, inheritedUnderline));
+                    break;
                 case Span span:
                     // Span 자체의 서식을 자식에게 누적해서 내려준다
                     var spanBold = inheritedBold || span.FontWeight == FontWeights.Bold;
@@ -98,8 +105,6 @@ public static class NoteLineExtractor
                             std.Any(d => d.Location == TextDecorationLocation.Underline));
                     CollectRuns(span.Inlines, runs, spanBold, spanUnderline);
                     break;
-                // LineBreak 등 기타 Inline은 무시 — Noticker 본문은 줄 단위 Paragraph라
-                // soft break는 입력 경로상 생기지 않는다 (pull도 '\n'을 공백으로 평탄화)
             }
         }
     }
