@@ -61,6 +61,7 @@ public partial class App : System.Windows.Application
         SyncQueue = new SyncQueue(StickerRepo!, _notionClient, AppSettings.Instance);
         SyncQueue.SyncError += OnSyncError;
         SyncQueue.SyncConflict += OnSyncConflict;
+        SyncQueue.SyncSucceeded += OnSyncSucceeded;
         SyncQueue.LiveStickerLookup = id => _stickerWindows.TryGetValue(id, out var w) ? w.Sticker : null;
         _ = EnsureBotUserIdAsync();   // 덮어쓰기 보호/pull의 전제 — 실패해도 앱 동작엔 영향 없음
 
@@ -569,6 +570,16 @@ public partial class App : System.Windows.Application
         });
     }
 
+    private void OnSyncSucceeded(string stickerId)
+    {
+        // 주황(대기) → 초록(동기화됨) 즉시 반영 — 백그라운드 전이는 UI 갱신 트리거가 없음
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (_stickerWindows.TryGetValue(stickerId, out var win))
+                win.RefreshSyncIndicator();
+        });
+    }
+
     // 토큰이 교체되면 bot id도 무효 — 옛 봇 id로는 모든 push가 "남의 수정"으로 보여
     // 매번 충돌이 난다. SettingsWindow가 토큰 저장 시 호출
     public void InvalidateBotUserId()
@@ -588,6 +599,9 @@ public partial class App : System.Windows.Application
                 tipTitle: "Noticker — Sync 실패",
                 tipText: message,
                 tipIcon: ToolTipIcon.Error);
+            // 실패 점/툴팁 즉시 반영 (백그라운드 전이는 UI 갱신 트리거가 없음)
+            if (_stickerWindows.TryGetValue(stickerId, out var win))
+                win.RefreshSyncIndicator();
         });
     }
 

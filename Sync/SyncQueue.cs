@@ -13,6 +13,9 @@ public class SyncQueue
     // alreadyPushed=true는 사후 검출(TOCTOU) — push가 이미 반영된 뒤라 "보류" 문구는 거짓
     public event Action<string, string, bool>? SyncConflict;
 
+    // (stickerId) — push 성공. 백그라운드 전이라 App이 표시등 갱신을 중계해야 한다
+    public event Action<string>? SyncSucceeded;
+
     private readonly ConcurrentQueue<Sticker> _queue = new();
     private readonly StickerRepository _repo;
     private readonly NotionClient _client;
@@ -145,6 +148,7 @@ public class SyncQueue
             s.SyncState = "synced";
             s.RetryCount = 0;
             _repo.UpdateSyncState(s.Id, "synced", s.NotionPageId, 0);
+            SyncSucceeded?.Invoke(s.Id);
         }
         catch (NotionPageNotFoundException)
         {
