@@ -94,8 +94,10 @@ Win32 전부를 이 클래스에 격리. 얇은 래퍼로 유지하고 자동 �
      `ApplyHotkey()` 재호출(직전까지 들고 있던 조합이라 사실상 성공 — 실패해도
      무시, best-effort), 콤보 선택을 old로 되돌리고 인라인 에러 표시:
      "이 조합은 다른 앱이 사용 중입니다." (기존 SettingsWindow 상태 텍스트 패턴).
-  3. 성공/복원 후의 `AppSettings.HotkeyPreset` 값을
-     `_settings.Set("hotkey_preset", …)`로 영속 — 실패한 새 값이 DB에 남지 않는다.
+  3. 성공 시에만 저장이 계속 진행돼 `AppSettings.HotkeyPreset` 값이
+     `_settings.Set("hotkey_preset", …)`로 영속된다. 실패 시에는 저장 전체가
+     중단된다(창 유지 — 인라인 에러가 실제로 보이도록) — 실패한 새 값이 DB에
+     남지 않는다.
 
 ## 5. 에러 처리 요약
 

@@ -5,8 +5,6 @@ namespace Noticker.Infrastructure;
 // 충돌해 후보에서 제외됐다 (스펙 D1)
 public static class HotkeyPresets
 {
-    public const string DefaultKey = "ctrl_alt_n";
-
     public const uint ModAlt = 0x0001;
     public const uint ModControl = 0x0002;
     public const uint ModShift = 0x0004;
