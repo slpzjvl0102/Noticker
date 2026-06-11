@@ -40,6 +40,15 @@ public class NoteLineSerializerTests
     }
 
     [Fact]
+    public void Serialize_DoesNotEscapeKorean()
+    {
+        var json = NoteLineSerializer.Serialize(
+            [new(NoteLineKind.Paragraph, [new NoteRun("한글", false, false)])]);
+        Assert.Contains("한글", json);
+        Assert.DoesNotContain("\\u", json);
+    }
+
+    [Fact]
     public void RoundTrip_EmptyList()
     {
         Assert.Equal([], NoteLineSerializer.Deserialize(NoteLineSerializer.Serialize([])));

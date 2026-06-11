@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -18,6 +19,13 @@ public static class NoteLineSerializer
         [property: JsonPropertyName("Kind")] string? Kind,
         [property: JsonPropertyName("Runs")] List<RunDto?>? Runs);
 
+    // 한글을 \uXXXX로 이스케이프하지 않는다 (~3x 절감). DB 저장 전용 JSON이라 안전 —
+    // [JsonPropertyName] 고정과 같은 이유로 옵션도 여기 고정 (외부 옵션 주입 금지)
+    private static readonly JsonSerializerOptions _writeOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     public static string Serialize(IReadOnlyList<NoteLine> lines)
     {
         var dtos = lines.Select(l => new LineDto(
@@ -28,7 +36,7 @@ public static class NoteLineSerializer
                 _ => "paragraph",
             },
             l.Runs.Select(r => (RunDto?)new RunDto(r.Text, r.Bold, r.Underline)).ToList())).ToList();
-        return JsonSerializer.Serialize(dtos);
+        return JsonSerializer.Serialize(dtos, _writeOptions);
     }
 
     public static List<NoteLine>? Deserialize(string? json)
