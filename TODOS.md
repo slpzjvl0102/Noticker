@@ -26,6 +26,8 @@
   - 구현: body_runs 컬럼(v5) + NoteLineSerializer/NoteLineExtractor + BuildAnnotatedBlocks
     (plain 폴백 포함). 가져오기 경고는 italic/strikethrough/code/색으로 축소.
     스펙: docs/superpowers/specs/2026-06-11-push-annotations-and-sync-dot-design.md
-- [ ] **글로벌 hotkey로 스티커 생성** (M, P2)
-  - What: 시스템 전역 단축키 → 새 스티커
-  - Why: CEO 리뷰 지적 — capture 도구의 최고 레버리지 기능이 두 계획 연속 제외됨
+- [x] **글로벌 hotkey로 스티커 생성** (M, P2) — 2026-06-11 출하
+  - 구현: HotkeyPresets(프리셋 4종 매핑) + HotkeyManager(메시지 전용 HwndSource +
+    RegisterHotKey, MOD_NOREPEAT). 기본 Ctrl+Alt+N, 설정 콤보로 변경(실패 시 인라인
+    에러+이전 값 복원), 시작 실패는 트레이 풍선. 생성 즉시 본문 포커스.
+    스펙: docs/superpowers/specs/2026-06-11-global-hotkey-design.md
