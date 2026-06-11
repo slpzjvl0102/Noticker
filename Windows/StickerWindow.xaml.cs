@@ -168,8 +168,9 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Sync indicator ─────────────────────────────────────────────────────────
 
-    // 빈 메모는 push 대상이 아니라(SyncQueue.ProcessAsync skip 조건과 동일 기준)
-    // 'pending' 주황이 영원히 남는다 — 회색으로 사실을 표시 (D9)
+    // 빈 메모는 push 대상이 아니라 'pending' 주황이 영원히 남는다 — 회색으로 사실을 표시 (D9).
+    // SyncQueue.ProcessAsync skip 조건(Title/Body 빈)의 부분집합: NotionPageId가 있는
+    // 빈 스티커(동기화 후 내용 삭제)는 기존 상태색을 유지한다 — 원격에 내용이 남아 있으므로
     private bool IsEmptyUnsynced =>
         _sticker.NotionPageId is null &&
         string.IsNullOrEmpty(_sticker.Title) && string.IsNullOrEmpty(_sticker.Body);
