@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Noticker.Infrastructure;
 using Noticker.Models;
 
 namespace Noticker.Sync;
@@ -56,7 +57,7 @@ public class NotionClient
         SetAuth();
 
         var props = BuildProperties(s);
-        var children = BuildParagraphBlocks(s.Body);
+        var children = BuildBodyBlocks(s);
 
         var payload = new { parent = new { database_id = _settings.TargetDbId }, properties = props, children };
         var response = await PostAsync("/pages", payload, ct);
@@ -80,7 +81,7 @@ public class NotionClient
             await DeleteBlockAsync(blockId, ct);
 
         // 3. Append new paragraph blocks if body is non-empty
-        var blocks = BuildParagraphBlocks(s.Body);
+        var blocks = BuildBodyBlocks(s);
         if (blocks.Length > 0)
             await PatchAsync($"/blocks/{s.NotionPageId}/children", new { children = blocks }, ct);
     }
@@ -349,6 +350,55 @@ public class NotionClient
 
         return props;
     }
+
+    // BodyRuns(NoteLine JSON)가 있으면 서식 보존 블록, 없거나 깨졌으면 기존 plain 경로 —
+    // 폴백이 push 자체를 보장한다 (기존 스티커는 다음 편집에서 BodyRuns가 생긴다)
+    private static object[] BuildBodyBlocks(Sticker s)
+    {
+        var lines = NoteLineSerializer.Deserialize(s.BodyRuns);
+        if (lines is not null) return BuildAnnotatedBlocks(lines);
+        if (s.BodyRuns is not null)
+            SyncLog.Write($"push: body_runs 역직렬화 실패 — plain 폴백 (sticker={s.Id[..8]})");
+        return BuildParagraphBlocks(s.Body);
+    }
+
+    // run 단위 rich_text 블록 — annotations는 굵게/밑줄 중 하나라도 있을 때만 포함
+    // (Notion 기본값이 모두 false라 생략 가능, payload 절약). 2000자 청크는 run 단위 분할.
+    public static object[] BuildAnnotatedBlocks(IReadOnlyList<NoteLine> lines)
+    {
+        return lines.Select(line =>
+        {
+            var richText = line.Runs
+                .Where(r => !string.IsNullOrEmpty(r.Text))
+                .SelectMany(r => SplitIntoChunks(r.Text, ChunkSize)
+                    .Select(c => MakeRichText(c, r.Bold, r.Underline)))
+                .ToArray();
+
+            return line.Kind switch
+            {
+                NoteLineKind.Bullet => (object)new
+                {
+                    type = "bulleted_list_item",
+                    bulleted_list_item = new { rich_text = richText }
+                },
+                NoteLineKind.Number => new
+                {
+                    type = "numbered_list_item",
+                    numbered_list_item = new { rich_text = richText }
+                },
+                _ => new
+                {
+                    type = "paragraph",
+                    paragraph = new { rich_text = richText }
+                },
+            };
+        }).ToArray();
+    }
+
+    private static object MakeRichText(string content, bool bold, bool underline) =>
+        bold || underline
+            ? new { text = new { content }, annotations = new { bold, underline } }
+            : new { text = new { content } };
 
     // Converts body text to Notion block array.
     // Lines starting with "• " become bulleted_list_item blocks.
