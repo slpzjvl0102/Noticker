@@ -69,7 +69,8 @@
 
 ### 가져오기 경고 축소
 - `NotionBlockConverter.HasAnnotations` → `HasUnsupportedAnnotations`로 의미 변경:
-  **italic / strikethrough / code만** 검사 (bold/underline은 이제 왕복 가능).
+  **italic / strikethrough / code + 기본값 아닌 color** 검사 (bold/underline은 이제
+  왕복 가능하지만 color는 어디서도 왕복하지 않으므로 경고 유지).
 - `NotionImportWindow`의 경고 다이얼로그 문구도 "굵게/밑줄 외 서식(기울임 등)은
   유지되지 않습니다" 취지로 갱신.
 
