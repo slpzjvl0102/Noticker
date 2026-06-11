@@ -52,6 +52,8 @@ public class NoteLineSerializerTests
     [InlineData("{\"oops\":1}")]
     [InlineData("[{\"Kind\":\"unknown\",\"Runs\":[]}]")]
     [InlineData("[{\"Kind\":\"paragraph\"}]")]
+    [InlineData("[null]")]
+    [InlineData("[{\"Kind\":\"paragraph\",\"Runs\":[null]}]")]
     public void Deserialize_InvalidInput_ReturnsNull(string? json)
     {
         Assert.Null(NoteLineSerializer.Deserialize(json));

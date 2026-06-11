@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Noticker.Sync;
 
@@ -6,8 +7,16 @@ namespace Noticker.Sync;
 // 역직렬화 실패는 null 반환 — 호출자(push)가 plain 폴백을 타도록 예외를 삼킨다
 public static class NoteLineSerializer
 {
-    private sealed record RunDto(string? T, bool B, bool U);
-    private sealed record LineDto(string? Kind, List<RunDto>? Runs);
+    // DB 영속 포맷 — 속성명을 C# 식별자에서 유도하지 않고 명시적으로 고정
+    // (공용 JsonSerializerOptions(camelCase 등)가 끼어도 기존 행을 계속 읽도록)
+    private sealed record RunDto(
+        [property: JsonPropertyName("T")] string? T,
+        [property: JsonPropertyName("B")] bool B,
+        [property: JsonPropertyName("U")] bool U);
+
+    private sealed record LineDto(
+        [property: JsonPropertyName("Kind")] string? Kind,
+        [property: JsonPropertyName("Runs")] List<RunDto?>? Runs);
 
     public static string Serialize(IReadOnlyList<NoteLine> lines)
     {
@@ -18,7 +27,7 @@ public static class NoteLineSerializer
                 NoteLineKind.Number => "numbered",
                 _ => "paragraph",
             },
-            l.Runs.Select(r => new RunDto(r.Text, r.Bold, r.Underline)).ToList())).ToList();
+            l.Runs.Select(r => (RunDto?)new RunDto(r.Text, r.Bold, r.Underline)).ToList())).ToList();
         return JsonSerializer.Serialize(dtos);
     }
 
@@ -33,17 +42,18 @@ public static class NoteLineSerializer
             var lines = new List<NoteLine>(dtos.Count);
             foreach (var d in dtos)
             {
-                NoteLineKind? kind = d.Kind switch
+                NoteLineKind? kind = d?.Kind switch
                 {
                     "paragraph" => NoteLineKind.Paragraph,
                     "bullet" => NoteLineKind.Bullet,
                     "numbered" => NoteLineKind.Number,
                     _ => null,
                 };
-                // 알 수 없는 Kind/Runs 누락 — 부분 복구 대신 통째로 폴백 (본문 유실 방지)
-                if (kind is null || d.Runs is null) return null;
+                // 알 수 없는 Kind/Runs 누락/null 요소 — 부분 복구 대신 통째로 폴백 (본문 유실 방지)
+                if (d is null || kind is null || d.Runs is null || d.Runs.Any(r => r is null))
+                    return null;
                 lines.Add(new NoteLine(kind.Value,
-                    d.Runs.Select(r => new NoteRun(r.T ?? "", r.B, r.U)).ToList()));
+                    d.Runs.Select(r => new NoteRun(r!.T ?? "", r.B, r.U)).ToList()));
             }
             return lines;
         }
