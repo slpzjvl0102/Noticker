@@ -32,7 +32,7 @@ public class AppSettings : INotifyPropertyChanged
     public string? NotionBotUserId { get; set; }   // null = 덮어쓰기 보호/pull 미활성 (캐시 전)
     public string? NotionDbTitle { get; set; }     // 설정 창 요약 표시용 캐시 (온보딩 완료 시 저장)
     public string CategoryPropertyName { get; set; } = "Category";
-    public bool AutostartEnabled { get; set; }
+    public bool AutostartEnabled { get; set; } = true;   // 기본 활성 — 명시적 해제("false")만 비활성
     public List<string> CategoryOptions { get; set; } = [];
     public Dictionary<string, string> CategoryColors { get; set; } = [];
 

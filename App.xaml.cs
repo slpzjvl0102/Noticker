@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Forms;
 using Microsoft.Data.Sqlite;
@@ -67,6 +68,14 @@ public partial class App : System.Windows.Application
             AppSettings.Instance,
             id => _stickerWindows.TryGetValue(id, out var w) ? w : null,
             OnPullApplied);
+
+        // 자동 실행 기본 활성화 — 설정값을 레지스트리에 동기화 (멱등).
+        // PersistSettings만으론 설정 창을 안 연 사용자에게 기본값이 적용되지 않는다
+        var exePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
+        if (AppSettings.Instance.AutostartEnabled)
+            StartupManager.Enable(exePath);
+        else
+            StartupManager.Disable();
 
         InitTray();
         InitPomodoro();

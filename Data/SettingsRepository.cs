@@ -73,7 +73,7 @@ public class SettingsRepository
         settings.NotionDbTitle = Get("notion_db_title");
         settings.CategoryPropertyName = Get("category_property_name") ?? "Category";
         settings.ColorSwapped = Get("color_swapped") == "true";
-        settings.AutostartEnabled = Get("autostart_enabled") == "true";
+        settings.AutostartEnabled = Get("autostart_enabled") != "false";   // 기본 true
 
         settings.PomodoroFocusMinutes = AppSettings.ParseClamped(Get("pomodoro_focus_min"),
             AppSettings.PomodoroFocusDefault, AppSettings.PomodoroFocusMin, AppSettings.PomodoroFocusMax);

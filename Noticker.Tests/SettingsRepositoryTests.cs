@@ -98,6 +98,22 @@ public class SettingsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void LoadInto_MissingAutostart_DefaultsTrue()
+    {
+        AppSettings.Instance.AutostartEnabled = false;   // 잡값
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.True(AppSettings.Instance.AutostartEnabled);
+    }
+
+    [Fact]
+    public void LoadInto_AutostartFalse_Loaded()
+    {
+        _repo.Set("autostart_enabled", "false");
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.False(AppSettings.Instance.AutostartEnabled);
+    }
+
+    [Fact]
     public void LoadInto_CategoryPropertyName_DefaultsToCategory()
     {
         // fresh DB — no category_property_name stored
