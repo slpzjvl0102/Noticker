@@ -31,6 +31,7 @@ public sealed class HotkeyManager : IDisposable
     // 기존 등록 해제 후 새 조합 등록. 실패(타 앱 점유) 시 false — 등록 없음 상태
     public bool Register(uint modifiers, uint vk)
     {
+        if (_disposed) return false;
         Unregister();
         _registered = RegisterHotKey(_source.Handle, HotkeyId, modifiers, vk);
         return _registered;
@@ -45,6 +46,7 @@ public sealed class HotkeyManager : IDisposable
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        if (_disposed) return IntPtr.Zero;   // 큐에 남은 WM_HOTKEY가 Dispose 후 도착하는 레이스 차단
         if (msg == WmHotkey && wParam.ToInt32() == HotkeyId)
         {
             Pressed?.Invoke();
