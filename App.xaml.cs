@@ -207,7 +207,9 @@ public partial class App : System.Windows.Application
         if (IsShuttingDown) return;
         var win = CreateSticker();
         win.Activate();
-        win.FocusBody();
+        // Show 직후라 레이아웃 전 — 동기 Focus는 조용히 실패할 수 있다. Loaded 후로 지연
+        win.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded,
+            (Action)win.FocusBody);
     }
 
     private static IReadOnlyList<(string DeviceName, System.Drawing.Rectangle Area)> CurrentScreens() =>
