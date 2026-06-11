@@ -357,8 +357,8 @@ public class NotionClient
     {
         var lines = NoteLineSerializer.Deserialize(s.BodyRuns);
         if (lines is not null) return BuildAnnotatedBlocks(lines);
-        if (s.BodyRuns is not null)
-            SyncLog.Write($"push: body_runs 역직렬화 실패 — plain 폴백 (sticker={s.Id[..8]})");
+        if (!string.IsNullOrEmpty(s.BodyRuns))
+            SyncLog.Write($"push: body_runs 역직렬화 실패 — plain 폴백 (sticker={s.Id[..Math.Min(8, s.Id.Length)]})");
         return BuildParagraphBlocks(s.Body);
     }
 
