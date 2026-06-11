@@ -259,6 +259,9 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         SyncFormattingButtons();
     }
 
+    // 전역 단축키 생성 경로 — 즉시 타이핑 가능하게 본문에 포커스 (App.OnHotkeyPressed)
+    public void FocusBody() => BodyBox.Focus();
+
     private void BodyBox_SelectionChanged(object sender, RoutedEventArgs e) =>
         SyncFormattingButtons();
 

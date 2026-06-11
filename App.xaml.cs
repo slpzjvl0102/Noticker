@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
 {
     private Mutex? _mutex;
     private NotifyIcon? _trayIcon;
+    private HotkeyManager? _hotkey;
 
     public StickerRepository? StickerRepo { get; private set; }
     public SettingsRepository? SettingsRepo { get; private set; }
@@ -79,6 +80,7 @@ public partial class App : System.Windows.Application
             StartupManager.Disable();
 
         InitTray();
+        InitHotkey();
         InitPomodoro();
         RestoreStickers();
         StartSyncLoop();
@@ -174,6 +176,40 @@ public partial class App : System.Windows.Application
         _trayIcon.ContextMenuStrip = menu;
     }
 
+    private void InitHotkey()
+    {
+        _hotkey = new HotkeyManager();
+        _hotkey.Pressed += OnHotkeyPressed;
+        if (!ApplyHotkey())
+        {
+            // 시작 시 실패(타 앱 점유) — 풍선 1회, 앱은 정상 동작 (스펙 §5)
+            var name = HotkeyPresets.DisplayName(AppSettings.Instance.HotkeyPreset);
+            _trayIcon?.ShowBalloonTip(6000, "Noticker",
+                $"단축키 등록 실패 — {name}을(를) 다른 앱이 사용 중입니다. 설정에서 변경하세요.",
+                ToolTipIcon.Warning);
+        }
+    }
+
+    // 시작·설정 변경 공용 — AppSettings의 프리셋을 실제 등록에 반영. 성공 여부 반환.
+    // SettingsWindow가 변경 적용 시 호출
+    public bool ApplyHotkey()
+    {
+        if (_hotkey is null) return false;
+        var combo = HotkeyPresets.Resolve(AppSettings.Instance.HotkeyPreset);
+        if (combo is null) { _hotkey.Unregister(); return true; }   // 사용 안 함
+        return _hotkey.Register(combo.Value.Modifiers, combo.Value.Vk);
+    }
+
+    // 단축키 = 즉시 캡처 — 생성 후 창 활성화 + 본문 포커스 (바로 타이핑).
+    // 사용자가 등록된 hotkey를 누른 직후라 OS가 포그라운드 전환을 허용한다
+    private void OnHotkeyPressed()
+    {
+        if (IsShuttingDown) return;
+        var win = CreateSticker();
+        win.Activate();
+        win.FocusBody();
+    }
+
     private static IReadOnlyList<(string DeviceName, System.Drawing.Rectangle Area)> CurrentScreens() =>
         Screen.AllScreens.Select(sc => (sc.DeviceName, sc.WorkingArea)).ToList();
 
@@ -191,7 +227,7 @@ public partial class App : System.Windows.Application
         }
     }
 
-    public void CreateSticker()
+    public StickerWindow CreateSticker()
     {
         var screen = GetActiveScreen();
         var wa = screen.WorkingArea;
@@ -206,6 +242,7 @@ public partial class App : System.Windows.Application
         };
         StickerRepo!.Insert(s);
         OpenStickerWindow(s, x, y);
+        return _stickerWindows[s.Id];
     }
 
     private void OpenStickerWindow(Sticker s, int x, int y)
@@ -611,6 +648,7 @@ public partial class App : System.Windows.Application
         _pomodoroTimer?.Stop();      // 트레이 dispose 전에 정지 — disposed NotifyIcon 쓰기 방지
         _cts.Cancel();
         _retryTimer?.Stop();
+        _hotkey?.Dispose();
         _trayIcon?.Dispose();
         _trayIcon = null;
         Shutdown();
@@ -627,6 +665,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _cts.Cancel();
+        _hotkey?.Dispose();
         _trayIcon?.Dispose();
         _mutex?.ReleaseMutex();
         base.OnExit(e);
