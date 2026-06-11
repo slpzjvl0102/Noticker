@@ -180,10 +180,11 @@ public class PullService
                         var lines = NotionBlockConverter.ToLines(result.Value.Blocks);
                         var plain = NotionBlockConverter.ToPlainText(lines);
                         var rtf = RtfComposer.Compose(lines, s.FontFamily);
+                        var runsJson = NoteLineSerializer.Serialize(lines);
                         // 쌍을 먼저 갱신 — ApplyPulledContent의 repo.Update가 함께 영속
                         s.NotionLastEdit = p.LastEditedTime;
                         s.NotionLastEditBy = p.LastEditedById;
-                        win.ApplyPulledContent(p.Title, plain, rtf);
+                        win.ApplyPulledContent(p.Title, plain, rtf, runsJson);
                         _notify(p.Title, "Notion에서 갱신됨");
                         applied++;
                         Advance(p.LastEditedTime);

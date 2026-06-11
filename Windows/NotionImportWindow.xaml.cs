@@ -126,14 +126,14 @@ public partial class NotionImportWindow : Window
             if (result != MessageBoxResult.Yes) return;
             pullDisabled = true;   // 이후 pull로 재훼손 방지
         }
-        else if (NotionBlockConverter.HasAnnotations(blocks))
+        else if (NotionBlockConverter.HasUnsupportedAnnotations(blocks))
         {
-            // 블록 종류는 지원 범위지만 서식 annotation이 있음 — push가 annotation을
-            // 보내지 못해(plain text) 스티커를 수정하면 Notion 쪽 서식이 벗겨진다.
-            // 같은 손실 클래스이므로 같은 동의 게이트 (pull은 계속 허용)
+            // 블록 종류는 지원 범위지만 왕복 불가 서식이 있음 — 굵게/밑줄은 이제
+            // annotation push로 보존되므로 그 외 서식만 동의 게이트
             var result = MessageBox.Show(
-                "이 페이지에는 글자 서식(굵게/밑줄/색상 등)이 있습니다.\n" +
-                "가져온 뒤 스티커를 수정하면 Notion 쪽 글자 서식이 사라질 수 있습니다.\n\n계속할까요?",
+                "이 페이지에는 스티커가 지원하지 않는 글자 서식(기울임/취소선/코드/색상)이 있습니다.\n" +
+                "가져온 뒤 스티커를 수정하면 해당 서식이 사라질 수 있습니다. " +
+                "(굵게/밑줄은 유지됩니다)\n\n계속할까요?",
                 "서식 경고", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;
         }
@@ -141,11 +141,12 @@ public partial class NotionImportWindow : Window
         var lines = NotionBlockConverter.ToLines(blocks);
         var plain = NotionBlockConverter.ToPlainText(lines);
         var rtf = RtfComposer.Compose(lines);
+        var runsJson = NoteLineSerializer.Serialize(lines);
 
         // RawTitle 사용 — DisplayTitle("(제목 없음)")을 저장하면 첫 push가 Notion 페이지
         // 제목을 placeholder로 바꿔버린다 (검증 리뷰 F4)
         App.Current.CreateImportedSticker(
-            item.RawTitle, plain, rtf, item.PageId, item.LastEditedTime, item.LastEditedById, pullDisabled);
+            item.RawTitle, plain, rtf, runsJson, item.PageId, item.LastEditedTime, item.LastEditedById, pullDisabled);
 
         // 목록에서 제거
         if (PageList.ItemsSource is List<ImportItem> list)

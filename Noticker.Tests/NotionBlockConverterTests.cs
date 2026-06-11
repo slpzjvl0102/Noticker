@@ -287,4 +287,50 @@ public class NotionBlockConverterTests
 
         Assert.Equal("title line\n• milk\n1. step", body);
     }
+
+    // ── HasUnsupportedAnnotations ──────────────────────────────────────────────
+    // bold/underline은 push가 annotation으로 왕복하므로 더 이상 경고 대상이 아니다
+
+    private static string AnnotatedBlock(string flag) =>
+        $$$"""
+        [{"type":"paragraph","has_children":false,
+          "paragraph":{"rich_text":[{"plain_text":"x","annotations":{"{{{flag}}}":true}}]}}]
+        """;
+
+    [Theory]
+    [InlineData("bold")]
+    [InlineData("underline")]
+    public void HasUnsupportedAnnotations_BoldUnderline_False(string flag)
+    {
+        Assert.False(NotionBlockConverter.HasUnsupportedAnnotations(Parse(AnnotatedBlock(flag))));
+    }
+
+    [Theory]
+    [InlineData("italic")]
+    [InlineData("strikethrough")]
+    [InlineData("code")]
+    public void HasUnsupportedAnnotations_OtherFlags_True(string flag)
+    {
+        Assert.True(NotionBlockConverter.HasUnsupportedAnnotations(Parse(AnnotatedBlock(flag))));
+    }
+
+    [Fact]
+    public void HasUnsupportedAnnotations_NonDefaultColor_True()
+    {
+        var blocks = Parse("""
+            [{"type":"paragraph","has_children":false,
+              "paragraph":{"rich_text":[{"plain_text":"x","annotations":{"color":"red"}}]}}]
+            """);
+        Assert.True(NotionBlockConverter.HasUnsupportedAnnotations(blocks));
+    }
+
+    [Fact]
+    public void HasUnsupportedAnnotations_NoAnnotations_False()
+    {
+        var blocks = Parse("""
+            [{"type":"paragraph","has_children":false,
+              "paragraph":{"rich_text":[{"plain_text":"x"}]}}]
+            """);
+        Assert.False(NotionBlockConverter.HasUnsupportedAnnotations(blocks));
+    }
 }

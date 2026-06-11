@@ -42,10 +42,9 @@ public static class NotionBlockConverter
         return (true, null);
     }
 
-    // 가져오기 경고용 — 페이지에 서식 annotation(굵게/밑줄/기타)이 하나라도 있는가.
-    // push가 annotation을 보내지 못하므로(plain text만), 서식 있는 페이지를 가져온 뒤
-    // 스티커를 수정하면 Notion 쪽 서식이 벗겨진다 — 동의가 필요한 손실 (검증 리뷰 F3)
-    public static bool HasAnnotations(JsonElement blocksArray)
+    // 가져오기 경고용 — 스티커가 왕복하지 못하는 서식(기울임/취소선/코드/색)이 있는가.
+    // bold/underline은 push가 annotation으로 보존하므로 경고 대상이 아니다
+    public static bool HasUnsupportedAnnotations(JsonElement blocksArray)
     {
         if (blocksArray.ValueKind != JsonValueKind.Array) return false;
 
@@ -62,7 +61,7 @@ public static class NotionBlockConverter
             foreach (var rt in richText.EnumerateArray())
             {
                 if (!TryGetProp(rt, "annotations", out var ann)) continue;
-                foreach (var flag in new[] { "bold", "italic", "strikethrough", "underline", "code" })
+                foreach (var flag in new[] { "italic", "strikethrough", "code" })
                 {
                     if (TryGetProp(ann, flag, out var v) && v.ValueKind == JsonValueKind.True)
                         return true;

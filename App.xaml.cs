@@ -256,7 +256,7 @@ public partial class App : System.Windows.Application
     // Notion 페이지 → 새 스티커 (가져오기 전용).
     // sync_state='synced'가 핵심 — 'pending' 기본값이면 1분 뒤 무편집 자동 push가
     // 본문 블록을 평탄화 텍스트로 교체해 Notion 원본 서식을 파괴한다 (리뷰 검증 시퀀스)
-    public void CreateImportedSticker(string title, string plainBody, string bodyRtf,
+    public void CreateImportedSticker(string title, string plainBody, string bodyRtf, string bodyRuns,
         string pageId, string editTime, string editBy, bool pullDisabled)
     {
         var screen = GetActiveScreen();
@@ -269,6 +269,7 @@ public partial class App : System.Windows.Application
             Title = title,
             Body = plainBody,
             BodyRtf = bodyRtf,
+            BodyRuns = bodyRuns,
             NotionPageId = pageId,
             NotionLastEdit = editTime,
             NotionLastEditBy = editBy,

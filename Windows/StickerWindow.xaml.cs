@@ -280,7 +280,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     // Pull 적용 — PullService(UI 스레드)에서 호출. 호출 전 PullService가 _sticker의
     // NotionLastEdit/By 쌍을 갱신해 두면 여기의 _repo.Update가 전체 행과 함께 영속한다.
     // _loading 가드로 TextChanged → pending 오염 방지
-    public void ApplyPulledContent(string title, string plainBody, string bodyRtf)
+    public void ApplyPulledContent(string title, string plainBody, string bodyRtf, string? bodyRuns)
     {
         _loading = true;
         try
@@ -289,6 +289,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             Notify(nameof(StickerTitle));
             _sticker.Body = plainBody;
             _sticker.BodyRtf = bodyRtf;
+            _sticker.BodyRuns = bodyRuns;
             LoadBody();
             _sticker.SyncState = "synced";
             _sticker.RetryCount = 0;
