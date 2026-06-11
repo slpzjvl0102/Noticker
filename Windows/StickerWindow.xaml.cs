@@ -168,22 +168,32 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Sync indicator ─────────────────────────────────────────────────────────
 
-    public Brush SyncDotColor => _sticker.SyncState switch
-    {
-        "synced"   => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
-        "failed"   => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
-        "conflict" => new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00)),
-        _          => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
-    };
+    // 빈 메모는 push 대상이 아니라(SyncQueue.ProcessAsync skip 조건과 동일 기준)
+    // 'pending' 주황이 영원히 남는다 — 회색으로 사실을 표시 (D9)
+    private bool IsEmptyUnsynced =>
+        _sticker.NotionPageId is null &&
+        string.IsNullOrEmpty(_sticker.Title) && string.IsNullOrEmpty(_sticker.Body);
 
-    public string SyncTooltip => _sticker.SyncState switch
-    {
-        "synced"   => $"동기화됨 ({_sticker.LastSyncedAt?[..10] ?? ""})"
-                      + (_sticker.PullDisabled ? "\nNotion 서식 미지원 — 가져오기 중단됨" : ""),
-        "failed"   => "동기화 실패 (수동 Sync로 재시도)",
-        "conflict" => "Notion과 충돌 — 수정하면 스티커 버전이 push됩니다",
-        _          => "동기화 대기 중…",
-    };
+    public Brush SyncDotColor => IsEmptyUnsynced
+        ? new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))
+        : _sticker.SyncState switch
+        {
+            "synced"   => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
+            "failed"   => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
+            "conflict" => new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00)),
+            _          => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
+        };
+
+    public string SyncTooltip => IsEmptyUnsynced
+        ? "빈 메모 — 동기화 대상 아님"
+        : _sticker.SyncState switch
+        {
+            "synced"   => $"동기화됨 ({_sticker.LastSyncedAt?[..10] ?? ""})"
+                          + (_sticker.PullDisabled ? "\nNotion 서식 미지원 — 가져오기 중단됨" : ""),
+            "failed"   => "동기화 실패 (수동 Sync로 재시도)",
+            "conflict" => "Notion과 충돌 — 수정하면 스티커 버전이 push됩니다",
+            _          => "동기화 대기 중…",
+        };
 
     // ── Char counter ───────────────────────────────────────────────────────────
 
