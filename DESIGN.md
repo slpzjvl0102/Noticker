@@ -47,6 +47,7 @@
 | `PlainListViewItemStyle` | ListViewItem | 시스템 크롬 없는 리스트 행 | NotionImport, NoteList(+Template 오버라이드) |
 
 Margin 규칙: 공유 스타일은 Margin을 갖지 않는다 — 배치는 창/인스턴스 책임.
+(예외: `FieldLabelStyle`의 `0,0,0,4` — 두 원본이 동일하게 가진 공통분이라 공유에 포함.)
 
 ## 새 창 추가 시 규칙
 
