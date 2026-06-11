@@ -72,12 +72,7 @@
                   Padding="0,4"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Padding" Value="0"/>
-                    <Setter Property="Margin" Value="0"/>
-                    <Setter Property="Cursor" Value="Hand"/>
-                    <Setter Property="Background" Value="Transparent"/>
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource PlainListViewItemStyle}">
                     <Setter Property="Template">
                         <Setter.Value>
                             <!-- 시스템 하이라이트/선택 비주얼 제거 — 카드가 hover를 직접 그린다 -->
