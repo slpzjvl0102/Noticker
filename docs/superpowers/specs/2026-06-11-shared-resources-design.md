@@ -75,8 +75,8 @@
 | `ActionButtonStyle` (Button) | Onboarding 판 (Margin 없음) | Settings 판에만 있던 `Margin="0,0,8,0"`은 Settings의 해당 버튼 인스턴스 속성으로 이동 — 픽셀 보존 |
 | `PrimaryButtonStyle` (Button) | Onboarding 판 (disabled 트리거 포함) | **유일한 의도적 동작 변화**: Settings 저장 버튼이 disabled 시각 처리를 얻음 (분기 버그 수정 방향) |
 | `FieldLabelStyle` (TextBlock) | 동일 (두 판 일치) | |
-| `LinePasswordBoxStyle` (PasswordBox) | 동일 (두 판 일치) | 키 부여 — 아래 암시적 래퍼 패턴 |
-| `PlainListViewItemStyle` (ListViewItem) | 동일 (두 판 일치) | NotionImport↔NoteList 복제분 |
+| `LinePasswordBoxStyle` (PasswordBox) | 공통분 (Margin 제외) | 두 판은 Margin만 다름 (Onboarding 0,0,0,8 / Settings 0,0,0,16) — Margin은 각 창 래퍼가 보유 |
+| `PlainListViewItemStyle` (ListViewItem) | 공통 setter 5개 | NoteList 판은 추가로 Template 오버라이드 보유 — BasedOn 래퍼에 Template setter 유지 |
 
 **암시적 스타일을 App 전역으로 올리지 않는다** (App 수준 암시적 TargetType
 스타일은 모든 창에 적용돼 StickerWindow 등을 오염). 대신 각 창에 한 줄 래퍼만
