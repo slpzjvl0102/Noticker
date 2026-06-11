@@ -33,6 +33,7 @@ public class AppSettings : INotifyPropertyChanged
     public string? NotionDbTitle { get; set; }     // 설정 창 요약 표시용 캐시 (온보딩 완료 시 저장)
     public string CategoryPropertyName { get; set; } = "Category";
     public bool AutostartEnabled { get; set; } = true;   // 기본 활성 — 명시적 해제("false")만 비활성
+    public string HotkeyPreset { get; set; } = "ctrl_alt_n";   // HotkeyPresets 프리셋 키
     public List<string> CategoryOptions { get; set; } = [];
     public Dictionary<string, string> CategoryColors { get; set; } = [];
 

@@ -114,6 +114,22 @@ public class SettingsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void LoadInto_MissingHotkeyPreset_DefaultsCtrlAltN()
+    {
+        AppSettings.Instance.HotkeyPreset = "stale";   // 잡값
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.Equal("ctrl_alt_n", AppSettings.Instance.HotkeyPreset);
+    }
+
+    [Fact]
+    public void LoadInto_HotkeyPreset_Loaded()
+    {
+        _repo.Set("hotkey_preset", "win_shift_n");
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.Equal("win_shift_n", AppSettings.Instance.HotkeyPreset);
+    }
+
+    [Fact]
     public void LoadInto_CategoryPropertyName_DefaultsToCategory()
     {
         // fresh DB — no category_property_name stored

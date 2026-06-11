@@ -74,6 +74,7 @@ public class SettingsRepository
         settings.CategoryPropertyName = Get("category_property_name") ?? "Category";
         settings.ColorSwapped = Get("color_swapped") == "true";
         settings.AutostartEnabled = Get("autostart_enabled") != "false";   // 기본 true
+        settings.HotkeyPreset = Get("hotkey_preset") ?? "ctrl_alt_n";
 
         settings.PomodoroFocusMinutes = AppSettings.ParseClamped(Get("pomodoro_focus_min"),
             AppSettings.PomodoroFocusDefault, AppSettings.PomodoroFocusMin, AppSettings.PomodoroFocusMax);
