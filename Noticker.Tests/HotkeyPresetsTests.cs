@@ -46,9 +46,14 @@ public class HotkeyPresetsTests
     [Fact]
     public void Resolve_UnknownKey_FallsBackToDefault()
     {
-        // DB에 잡값이 남아도 안전 — 기본 조합으로 폴백 (스펙 §1)
-        Assert.Equal(HotkeyPresets.Resolve(HotkeyPresets.DefaultKey),
-            HotkeyPresets.Resolve("garbage_value"));
+        // DB에 잡값이 남아도 안전 — 기본 조합으로 폴백 (스펙 §1).
+        // Resolve(DefaultKey)와 비교하면 양쪽이 같이 망가져도 통과 — 기대값을 직접 고정
+        var fallback = HotkeyPresets.Resolve("garbage_value");
+        Assert.NotNull(fallback);
+        Assert.Equal(
+            HotkeyPresets.ModControl | HotkeyPresets.ModAlt | HotkeyPresets.ModNoRepeat,
+            fallback.Value.Modifiers);
+        Assert.Equal(0x4Eu, fallback.Value.Vk);
     }
 
     [Theory]
