@@ -147,6 +147,45 @@ public class NoteLineExtractorStaTests
     }
 
     [Fact]
+    public void UnknownInline_FallsBackToPlainText()
+    {
+        RunSta(() =>
+        {
+            var doc = new FlowDocument();
+            var p = new Paragraph { Margin = new Thickness(0) };
+            p.Inlines.Add(new Run("앞 "));
+            p.Inlines.Add(new Figure(new Paragraph(new Run("그림안텍스트"))));
+            doc.Blocks.Add(p);
+
+            var lines = NoteLineExtractor.Extract(doc);
+
+            var all = string.Concat(lines.SelectMany(l => l.Runs).Select(r => r.Text));
+            Assert.Contains("그림안텍스트", all);
+        });
+    }
+
+    [Fact]
+    public void HeavierThanBoldWeight_CountsAsBold()
+    {
+        RunSta(() =>
+        {
+            // 붙여넣기 유입 가능한 ExtraBold(800)는 Bold(700) 이상이라 굵게로 취급,
+            // SemiBold(600)는 미만이라 일반으로 취급
+            var doc = new FlowDocument();
+            var p = new Paragraph { Margin = new Thickness(0) };
+            p.Inlines.Add(new Run("엑스트라볼드") { FontWeight = FontWeights.ExtraBold });
+            p.Inlines.Add(new Run("세미볼드") { FontWeight = FontWeights.SemiBold });
+            doc.Blocks.Add(p);
+
+            var lines = NoteLineExtractor.Extract(doc);
+
+            Assert.Single(lines);
+            Assert.Contains(lines[0].Runs, r => r.Text == "엑스트라볼드" && r.Bold);
+            Assert.Contains(lines[0].Runs, r => r.Text == "세미볼드" && !r.Bold);
+        });
+    }
+
+    [Fact]
     public void EmptyDocument_ExtractsToZeroLines()
     {
         RunSta(() =>

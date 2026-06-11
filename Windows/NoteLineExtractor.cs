@@ -85,7 +85,9 @@ public static class NoteLineExtractor
                 case Run run:
                     // FontWeight은 WPF DP 상속으로 부모 Span의 값이 run.FontWeight에 반영됨.
                     // TextDecorations는 DP 상속이 아니라 직접 탐색 + 부모에서 내려온 플래그로 OR.
-                    var bold = inheritedBold || run.FontWeight == FontWeights.Bold;
+                    // Bold 판정은 정확 일치 대신 weight ≥ 700 — 붙여넣은 ExtraBold 등도 굵게로
+                    var bold = inheritedBold ||
+                        run.FontWeight.ToOpenTypeWeight() >= FontWeights.Bold.ToOpenTypeWeight();
                     var underline = inheritedUnderline ||
                         (run.TextDecorations is { Count: > 0 } td &&
                             td.Any(d => d.Location == TextDecorationLocation.Underline));
@@ -99,11 +101,20 @@ public static class NoteLineExtractor
                     break;
                 case Span span:
                     // Span 자체의 서식을 자식에게 누적해서 내려준다
-                    var spanBold = inheritedBold || span.FontWeight == FontWeights.Bold;
+                    var spanBold = inheritedBold ||
+                        span.FontWeight.ToOpenTypeWeight() >= FontWeights.Bold.ToOpenTypeWeight();
                     var spanUnderline = inheritedUnderline ||
                         (span.TextDecorations is { Count: > 0 } std &&
                             std.Any(d => d.Location == TextDecorationLocation.Underline));
                     CollectRuns(span.Inlines, runs, spanBold, spanUnderline);
+                    break;
+                default:
+                    // 그 외 Inline(Figure/Floater/InlineUIContainer 등) — 스펙 오류 처리 조항:
+                    // 텍스트만 취해 서식 없음으로 처리, plain(Body)과 본문이 어긋나지 않게
+                    var fallbackText = new TextRange(inline.ContentStart, inline.ContentEnd)
+                        .Text.Replace("\r\n", "\n");
+                    if (fallbackText.Length > 0)
+                        runs.Add(new NoteRun(fallbackText, false, false));
                     break;
             }
         }

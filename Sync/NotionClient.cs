@@ -374,6 +374,15 @@ public class NotionClient
                     .Select(c => MakeRichText(c, r.Bold, r.Underline)))
                 .ToArray();
 
+            // Notion 한도: 블록당 rich_text 100개 — 초과 시 그 줄만 평문 강등 (400 방지)
+            if (richText.Length > 100)
+            {
+                var flat = string.Concat(line.Runs.Select(r => r.Text));
+                richText = SplitIntoChunks(flat, ChunkSize)
+                    .Select(c => MakeRichText(c, bold: false, underline: false))
+                    .ToArray();
+            }
+
             return line.Kind switch
             {
                 NoteLineKind.Bullet => (object)new

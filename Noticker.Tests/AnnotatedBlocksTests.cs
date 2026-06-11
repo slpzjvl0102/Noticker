@@ -80,4 +80,19 @@ public class AnnotatedBlocksTests
         Assert.Equal(1, rts.GetArrayLength());
         Assert.Equal("a", rts[0].GetProperty("text").GetProperty("content").GetString());
     }
+
+    [Fact]
+    public void Over100Runs_DegradesLineToPlain()
+    {
+        var runs = Enumerable.Range(0, 150)
+            .Select(i => new NoteRun("a", i % 2 == 0, false)).ToList();
+        var root = Build(new NoteLine(NoteLineKind.Paragraph, runs));
+
+        var rts = root[0].GetProperty("paragraph").GetProperty("rich_text");
+        Assert.True(rts.GetArrayLength() <= 100);
+        Assert.Equal(new string('a', 150),
+            string.Concat(Enumerable.Range(0, rts.GetArrayLength())
+                .Select(i => rts[i].GetProperty("text").GetProperty("content").GetString())));
+        Assert.False(rts[0].TryGetProperty("annotations", out _));
+    }
 }
