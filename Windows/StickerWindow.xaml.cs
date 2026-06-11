@@ -567,6 +567,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             }
         }
         _sticker.Body = string.Join("\n", lines).TrimEnd('\n');
+        // 같은 문서에서 run 단위 서식도 추출 — push가 굵게/밑줄을 annotation으로 보내도록
+        _sticker.BodyRuns = NoteLineSerializer.Serialize(NoteLineExtractor.Extract(BodyBox.Document));
     }
 
     private bool IsBodyEmpty()
