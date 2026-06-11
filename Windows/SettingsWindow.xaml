@@ -6,88 +6,15 @@
         WindowStartupLocation="Manual"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Background="#FAFAFA">
+        Background="{StaticResource SurfaceBrush}">
 
     <Window.Resources>
-        <!-- Minimal action button (outlined) -->
-        <Style x:Key="ActionButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="#CCCCCC"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#333333"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="3"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#F0F0F0"/>
-                                <Setter TargetName="bd" Property="BorderBrush" Value="#999999"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#E4E4E4"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="bd" Property="Opacity" Value="0.4"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Primary (Save) button — black fill -->
-        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="24,8"/>
-            <Setter Property="Background" Value="#1A1A1A"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="3"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#333333"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#000000"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Field label -->
-        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="#666666"/>
-            <Setter Property="Margin" Value="0,0,0,4"/>
-        </Style>
+        <!-- 버튼/라벨은 Styles/SharedStyles.xaml 공유 — 창 전용 리소스만 여기 둔다 -->
 
         <!-- Section heading -->
         <Style x:Key="SectionHeadingStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="#777777"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSectionBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,16,0,8"/>
         </Style>
@@ -97,27 +24,21 @@
             <Setter Property="Padding" Value="0,6"/>
             <Setter Property="Margin" Value="0,0,0,16"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="BorderBrush" Value="#DDDDDD"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderInputBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#1A1A1A"/>
+            <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
         </Style>
 
-        <!-- Line-style PasswordBox -->
-        <Style TargetType="PasswordBox">
-            <Setter Property="Padding" Value="0,6"/>
+        <!-- Line-style PasswordBox — 공유 LinePasswordBoxStyle + 창 고유 Margin -->
+        <Style TargetType="PasswordBox" BasedOn="{StaticResource LinePasswordBoxStyle}">
             <Setter Property="Margin" Value="0,0,0,16"/>
-            <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="BorderBrush" Value="#DDDDDD"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#1A1A1A"/>
         </Style>
 
         <!-- Minimal CheckBox -->
         <Style TargetType="CheckBox">
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#333333"/>
+            <Setter Property="Foreground" Value="{StaticResource InkHoverBrush}"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
@@ -130,7 +51,7 @@
         </Grid.RowDefinitions>
 
         <!-- Black header — mirrors the sticker title bar -->
-        <Grid Grid.Row="0" Background="#1A1A1A">
+        <Grid Grid.Row="0" Background="{StaticResource InkBrush}">
             <TextBlock Text="Noticker 설정"
                        Foreground="White"
                        FontSize="14"
@@ -146,11 +67,12 @@
                 <!-- 노션 연결 — 입력은 OnboardingWindow가 소유, 여기는 요약만 -->
                 <TextBlock Text="노션 연결" Style="{StaticResource SectionHeadingStyle}"
                            Margin="0,0,0,8"/>
-                <TextBlock x:Name="ConnectionSummary" FontSize="13" Foreground="#1A1A1A"
+                <TextBlock x:Name="ConnectionSummary" FontSize="13" Foreground="{StaticResource InkBrush}"
                            TextWrapping="Wrap" Margin="0,0,0,8"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                     <Button x:Name="ReconnectButton" Content="연결 다시 설정"
                             Style="{StaticResource ActionButtonStyle}"
+                            Margin="0,0,8,0"
                             Click="ReconnectButton_Click"/>
                 </StackPanel>
 
@@ -161,6 +83,7 @@
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                     <Button x:Name="RefreshCatButton" Content="옵션 새로고침"
                             Style="{StaticResource ActionButtonStyle}"
+                            Margin="0,0,8,0"
                             Click="RefreshCatButton_Click"/>
                 </StackPanel>
                 <TextBlock x:Name="CatStatusText" FontSize="12" Foreground="#555555"
@@ -183,7 +106,7 @@
                     <ComboBoxItem Content="Ctrl+Alt+Space" Tag="ctrl_alt_space"/>
                     <ComboBoxItem Content="사용 안 함" Tag="none"/>
                 </ComboBox>
-                <TextBlock x:Name="HotkeyStatusText" FontSize="12" Foreground="#C0392B"
+                <TextBlock x:Name="HotkeyStatusText" FontSize="12" Foreground="{StaticResource DangerBrush}"
                            Margin="0,0,0,8" Visibility="Collapsed"/>
 
                 <!-- Pomodoro -->
