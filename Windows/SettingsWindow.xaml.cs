@@ -32,6 +32,7 @@ public partial class SettingsWindow : Window
             : "연결 안 됨";
         ColorSwapCheck.IsChecked = app.ColorSwapped;
         AutostartCheck.IsChecked = app.AutostartEnabled;
+        SelectHotkeyItem(app.HotkeyPreset);
 
         PomFocusBox.Text = app.PomodoroFocusMinutes.ToString();
         PomShortBox.Text = app.PomodoroShortBreakMinutes.ToString();
@@ -44,6 +45,13 @@ public partial class SettingsWindow : Window
         CatStatusText.Text = cats.Count > 0
             ? $"{cats.Count}개 옵션 캐시됨"
             : "캐시 없음 — 새로고침 버튼을 클릭하세요";
+    }
+
+    private void SelectHotkeyItem(string presetKey)
+    {
+        foreach (System.Windows.Controls.ComboBoxItem item in HotkeyCombo.Items)
+            if ((string)item.Tag == presetKey) { HotkeyCombo.SelectedItem = item; return; }
+        HotkeyCombo.SelectedIndex = 0;   // 잡값 — 기본 Ctrl+Alt+N (HotkeyPresets.Resolve 폴백과 일치)
     }
 
     private void ReconnectButton_Click(object sender, RoutedEventArgs e)
@@ -80,9 +88,34 @@ public partial class SettingsWindow : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
+        if (!ApplyHotkeySetting()) return;   // 실패 — 창 유지, 인라인 에러 표시됨
         ApplyToAppSettings();
         PersistSettings();
         Close();
+    }
+
+    // 단축키 적용 + 실패 시 이전 값 복원 (스펙 §4 저장 흐름). 성공 여부 반환.
+    // 실패 시 다른 설정도 저장되지 않는다 — 사용자가 조합을 고치고 다시 저장
+    private bool ApplyHotkeySetting()
+    {
+        var app = AppSettings.Instance;
+        var old = app.HotkeyPreset;
+        var selected = (string)((System.Windows.Controls.ComboBoxItem)HotkeyCombo.SelectedItem).Tag;
+        if (selected == old) return true;    // 변경 없음 — 재등록 불필요
+
+        app.HotkeyPreset = selected;
+        if (App.Current.ApplyHotkey())
+        {
+            HotkeyStatusText.Visibility = Visibility.Collapsed;
+            return true;
+        }
+
+        app.HotkeyPreset = old;
+        App.Current.ApplyHotkey();           // 직전까지 들고 있던 조합 재등록 — best effort
+        SelectHotkeyItem(old);
+        HotkeyStatusText.Text = "이 조합은 다른 앱이 사용 중입니다.";
+        HotkeyStatusText.Visibility = Visibility.Visible;
+        return false;
     }
 
     private void ApplyToAppSettings()
@@ -111,6 +144,7 @@ public partial class SettingsWindow : Window
 
         _settings.Set("color_swapped", app.ColorSwapped ? "true" : "false");
         _settings.Set("autostart_enabled", app.AutostartEnabled ? "true" : "false");
+        _settings.Set("hotkey_preset", app.HotkeyPreset);
 
         _settings.Set("pomodoro_focus_min", app.PomodoroFocusMinutes.ToString());
         _settings.Set("pomodoro_short_break_min", app.PomodoroShortBreakMinutes.ToString());
