@@ -51,6 +51,7 @@ public class StickerRepository
         if (version < 2) MigrateToV2(conn);
         if (version < 3) MigrateToV3(conn);
         if (version < 4) MigrateToV4(conn);
+        if (version < 5) MigrateToV5(conn);
     }
 
     private static void MigrateToV2(SqliteConnection conn)
@@ -95,6 +96,18 @@ public class StickerRepository
         tx.Commit();
     }
 
+    private static void MigrateToV5(SqliteConnection conn)
+    {
+        using var tx = conn.BeginTransaction();
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "ALTER TABLE stickers ADD COLUMN body_runs TEXT";
+        cmd.ExecuteNonQuery();
+        cmd.CommandText = "PRAGMA user_version = 5";
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
+
     public List<(string Id, string Title, string Body, string UpdatedAt, bool IsHidden)> GetAllSummary()
     {
         using var conn = Open();
@@ -131,13 +144,13 @@ public class StickerRepository
                      monitor_device_name, position_x, position_y, width, height,
                      sync_state, retry_count, last_synced_at, created_at, updated_at,
                      body_rtf, font_family, is_hidden,
-                     notion_last_edit, notion_last_edit_by, pull_disabled)
+                     notion_last_edit, notion_last_edit_by, pull_disabled, body_runs)
                 VALUES
                     ($id, $npid, $title, $body, $cat,
                      $dev, $x, $y, $w, $h,
                      $ss, $rc, $lsa, $ca, $ua,
                      $body_rtf, $font_family, $is_hidden,
-                     $notion_last_edit, $notion_last_edit_by, $pull_disabled)
+                     $notion_last_edit, $notion_last_edit_by, $pull_disabled, $body_runs)
                 """;
             Bind(cmd, s);
             cmd.ExecuteNonQuery();
@@ -175,7 +188,8 @@ public class StickerRepository
                     is_hidden           = $is_hidden,
                     notion_last_edit    = $notion_last_edit,
                     notion_last_edit_by = $notion_last_edit_by,
-                    pull_disabled       = $pull_disabled
+                    pull_disabled       = $pull_disabled,
+                    body_runs           = $body_runs
                 WHERE id = $id
                 """;
             Bind(cmd, s);
@@ -320,6 +334,7 @@ public class StickerRepository
         cmd.Parameters.AddWithValue("$notion_last_edit", (object?)s.NotionLastEdit ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$notion_last_edit_by", (object?)s.NotionLastEditBy ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$pull_disabled", s.PullDisabled ? 1 : 0);
+        cmd.Parameters.AddWithValue("$body_runs", (object?)s.BodyRuns ?? DBNull.Value);
     }
 
     private static Sticker Map(SqliteDataReader r) => new()
@@ -345,5 +360,6 @@ public class StickerRepository
         NotionLastEdit = r.IsDBNull(r.GetOrdinal("notion_last_edit")) ? null : r.GetString(r.GetOrdinal("notion_last_edit")),
         NotionLastEditBy = r.IsDBNull(r.GetOrdinal("notion_last_edit_by")) ? null : r.GetString(r.GetOrdinal("notion_last_edit_by")),
         PullDisabled = r.GetInt32(r.GetOrdinal("pull_disabled")) != 0,
+        BodyRuns = r.IsDBNull(r.GetOrdinal("body_runs")) ? null : r.GetString(r.GetOrdinal("body_runs")),
     };
 }

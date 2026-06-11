@@ -16,6 +16,7 @@ public class Sticker
     public int RetryCount { get; set; }
     public string? LastSyncedAt { get; set; }
     public string? BodyRtf { get; set; }
+    public string? BodyRuns { get; set; }   // NoteLine JSON (push 서식) — null = plain 폴백
     public string FontFamily { get; set; } = "";
     public bool IsHidden { get; set; } = false;
     public string? NotionLastEdit { get; set; }

@@ -369,12 +369,29 @@ public class StickerRepositoryTests : IDisposable
     // ── Migration ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void FreshDatabase_ReportsUserVersion4()
+    public void FreshDatabase_ReportsUserVersion5()
     {
         using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_dbPath}");
         conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "PRAGMA user_version";
-        Assert.Equal(4, Convert.ToInt32(cmd.ExecuteScalar()));
+        Assert.Equal(5, Convert.ToInt32(cmd.ExecuteScalar()));
+    }
+
+    [Fact]
+    public void BodyRuns_InsertUpdate_RoundTrip()
+    {
+        var s = new Sticker
+        {
+            MonitorDeviceName = "m",
+            BodyRuns = """[{"Kind":"paragraph","Runs":[{"T":"굵게","B":true,"U":false}]}]""",
+        };
+        _repo.Insert(s);
+        var loaded = _repo.GetAll().Single(x => x.Id == s.Id);
+        Assert.Equal(s.BodyRuns, loaded.BodyRuns);
+
+        loaded.BodyRuns = null;
+        _repo.Update(loaded);
+        Assert.Null(_repo.GetAll().Single(x => x.Id == s.Id).BodyRuns);
     }
 }
