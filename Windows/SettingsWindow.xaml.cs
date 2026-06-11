@@ -101,7 +101,11 @@ public partial class SettingsWindow : Window
         var app = AppSettings.Instance;
         var old = app.HotkeyPreset;
         var selected = (string)((System.Windows.Controls.ComboBoxItem)HotkeyCombo.SelectedItem).Tag;
-        if (selected == old) return true;    // 변경 없음 — 재등록 불필요
+        if (selected == old)
+        {
+            HotkeyStatusText.Visibility = Visibility.Collapsed;   // 직전 실패 메시지 정리
+            return true;    // 변경 없음 — 재등록 불필요
+        }
 
         app.HotkeyPreset = selected;
         if (App.Current.ApplyHotkey())
