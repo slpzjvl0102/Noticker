@@ -91,7 +91,7 @@
         </Setter>
     </Style>
 
-    <!-- 필드 라벨 -->
+    <!-- 필드 라벨 — Margin 0,0,0,4는 두 원본이 동일하게 가진 공통분이라 예외적으로 공유에 포함 -->
     <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
