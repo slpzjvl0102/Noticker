@@ -292,6 +292,7 @@
                              BorderThickness="0"
                              Padding="6,4"
                              AcceptsReturn="True"
+                             AcceptsTab="True"
                              VerticalScrollBarVisibility="Auto"
                              FontSize="13"
                              TabIndex="1"

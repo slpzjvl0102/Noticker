@@ -17,7 +17,9 @@ public static class NoteLineSerializer
 
     private sealed record LineDto(
         [property: JsonPropertyName("Kind")] string? Kind,
-        [property: JsonPropertyName("Runs")] List<RunDto?>? Runs);
+        [property: JsonPropertyName("Runs")] List<RunDto?>? Runs,
+        // 중첩 깊이. 구버전 JSON엔 없음 → 역직렬화 시 0 (System.Text.Json이 생성자 기본값 사용)
+        [property: JsonPropertyName("D")] int D = 0);
 
     // 한글을 \uXXXX로 이스케이프하지 않는다 (~3x 절감). DB 저장 전용 JSON이라 안전 —
     // [JsonPropertyName] 고정과 같은 이유로 옵션도 여기 고정 (외부 옵션 주입 금지)
@@ -35,7 +37,8 @@ public static class NoteLineSerializer
                 NoteLineKind.Number => "numbered",
                 _ => "paragraph",
             },
-            l.Runs.Select(r => (RunDto?)new RunDto(r.Text, r.Bold, r.Underline)).ToList())).ToList();
+            l.Runs.Select(r => (RunDto?)new RunDto(r.Text, r.Bold, r.Underline)).ToList(),
+            l.Depth)).ToList();
         return JsonSerializer.Serialize(dtos, _writeOptions);
     }
 
@@ -61,7 +64,8 @@ public static class NoteLineSerializer
                 if (d is null || kind is null || d.Runs is null || d.Runs.Any(r => r is null))
                     return null;
                 lines.Add(new NoteLine(kind.Value,
-                    d.Runs.Select(r => new NoteRun(r!.T ?? "", r.B, r.U)).ToList()));
+                    d.Runs.Select(r => new NoteRun(r!.T ?? "", r.B, r.U)).ToList(),
+                    d.D));
             }
             return lines;
         }

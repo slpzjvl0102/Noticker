@@ -376,6 +376,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     private void BodyBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Tab) { HandleListTab(e); return; }
         if (e.Key != Key.Space) return;
         var para = BodyBox.CaretPosition.Paragraph;
         if (para == null || para.Parent is ListItem) return;
@@ -394,6 +395,54 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             EditingCommands.ToggleNumbering.Execute(null, BodyBox);
             e.Handled = true;
         }
+    }
+
+    // Tab/Shift+Tab = 리스트 항목 강등/승격 (Notion식 아웃라이너).
+    // WPF 내장 IncreaseIndentation/DecreaseIndentation이 "이전 형제 밑 중첩 / 첫 항목 no-op"을
+    // 정확히 수행한다(TextRangeEditLists.IndentListItems). Tab을 기본 TabForward에 맡기면 빈
+    // 셀렉션일 때 탭문자/빈 불릿이 생기므로 직접 실행 + Handled. (AcceptsTab=True 필요)
+    private void HandleListTab(KeyEventArgs e)
+    {
+        var li = BodyBox.CaretPosition?.Paragraph?.Parent as ListItem;
+        if (li == null) return;   // 리스트 밖 Tab은 기본 동작 유지
+
+        bool numbered = NoteLineDocumentBuilder.IsNumberedStyle(li.List?.MarkerStyle);   // 강등 전 종류 기억
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+            EditingCommands.DecreaseIndentation.Execute(null, BodyBox);
+        else
+            EditingCommands.IncreaseIndentation.Execute(null, BodyBox);
+
+        // 강등이 만든 새 중첩 List의 종류를 원래대로 강제 (WPF 클론 동작 불확실 대비) —
+        // 종류(불릿/번호)는 보존하고 스타일만 깊이로 사이클한다.
+        if (BodyBox.CaretPosition?.Paragraph?.Parent is ListItem li2 && li2.List is { } newList &&
+            NoteLineDocumentBuilder.IsNumberedStyle(newList.MarkerStyle) != numbered)
+            newList.MarkerStyle = numbered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc;
+
+        FixListMarkersByDepth();
+        RunBodyUpdate();          // 마커 변경은 TextChanged를 안 울리므로 보정 후 명시 저장
+        e.Handled = true;
+    }
+
+    // 문서의 모든 List를 재귀로 내려가며 깊이별 마커(●→○→■ / 1.→a.→i.)·들여쓰기·마커크기 교정.
+    // 종류는 List가 가진 것을 보존, 스타일만 깊이로 사이클. 마커 사이클은 NoteLineDocumentBuilder와 공유.
+    private void FixListMarkersByDepth()
+    {
+        foreach (var block in BodyBox.Document.Blocks)
+            if (block is System.Windows.Documents.List list)
+                FixListMarker(list, 0);
+    }
+
+    private static void FixListMarker(System.Windows.Documents.List list, int depth)
+    {
+        // 마커 종류/크기·들여쓰기·마커 간격은 빌더와 동일한 ApplyListStyle로(공백 균일 + DRY).
+        bool numbered = NoteLineDocumentBuilder.IsNumberedStyle(list.MarkerStyle);
+        NoteLineDocumentBuilder.ApplyListStyle(list, depth, numbered);
+        foreach (var item in list.ListItems)
+            foreach (var inner in item.Blocks)
+            {
+                if (inner is Paragraph p) p.FontSize = 13;   // 텍스트는 본문 크기(마커 폰트와 분리)
+                else if (inner is System.Windows.Documents.List nested) FixListMarker(nested, depth + 1);
+            }
     }
 
     private void FontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -503,33 +552,28 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _loading = true;
         try
         {
-            bool rtfLoaded = false;
-            if (!string.IsNullOrEmpty(_sticker.BodyRtf))
+            // 정본: BodyRuns(NoteLine+Depth) → 공용 빌더로 중첩 문서를 직접 구성.
+            // RTF는 중첩 List를 신뢰성 있게 왕복 못 하므로, BodyRuns가 있으면 우선한다.
+            var lines = NoteLineSerializer.Deserialize(_sticker.BodyRuns);
+            bool builtFromRuns = false;
+            if (lines is not null)
             {
-                try
-                {
-                    using var ms = new System.IO.MemoryStream(Encoding.Latin1.GetBytes(_sticker.BodyRtf));
-                    new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
-                        .Load(ms, DataFormats.Rtf);
-                    rtfLoaded = true;
-                }
-                catch { }
-            }
-            if (!rtfLoaded && !string.IsNullOrEmpty(_sticker.Body))
-            {
-                BodyBox.Document.Blocks.Clear();
-                BodyBox.Document.Blocks.Add(new Paragraph(new Run(_sticker.Body)));
+                NoteLineDocumentBuilder.Populate(BodyBox.Document, lines);
+                builtFromRuns = !RebuildLooksDegraded(lines);
+                if (!builtFromRuns)
+                    SyncLog.Write("load: bodyRuns 재구성 손실 의심 — RTF/plain 폴백 " +
+                                  $"(sticker={_sticker.Id[..Math.Min(8, _sticker.Id.Length)]})");
             }
 
-            // RTF loading sets explicit Margin values on paragraphs, overriding the Document style.
-            // Clear all local Margin values so the Document.Resources style (Margin=0) takes effect.
-            NormalizeDocumentMargins();
-
-            // RTF에는 색/글꼴/크기가 run 단위로 박혀 BodyBox의 테마 색·스티커 폰트 바인딩을
-            // 이긴다 — pull/가져오기로 합성된 RTF(기본 검정/기본 글꼴)와 테마 전환 후의
-            // 기존 RTF 모두 같은 문제. 앱에는 run 단위 색/크기/글꼴 UI가 없으므로
-            // (서식은 Bold/Underline뿐) 전부 걷어내고 컨트롤에서 상속받게 한다
-            NormalizeInheritedFormatting();
+            if (!builtFromRuns)
+            {
+                // 폴백/구버전 행: RTF는 색·폰트·마진이 run에 박혀 들어오므로 정규화로
+                // 테마 색·스티커 폰트를 상속받게 한다 (BodyRuns 경로는 빌더 출력이 이미 깨끗).
+                LoadFromRtfOrPlain();
+                NormalizeDocumentMargins();
+                NormalizeInheritedFormatting();
+            }
+            // BodyRuns 경로는 정규화하지 않는다 — 정규화가 마커 크기용 FontSize까지 지운다.
 
             if (!string.IsNullOrEmpty(_sticker.FontFamily))
             {
@@ -542,6 +586,36 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             _loading = false;
         }
         BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // BodyRuns로 만든 문서의 실제 텍스트가 기대치(run 텍스트 글자수 합)의 절반 미만이면 손상 의심.
+    // 마커는 양쪽 다 텍스트에 없어 공정한 비교. 공백/개행 제외. (corpus 게이트의 런타임 백업)
+    private bool RebuildLooksDegraded(IReadOnlyList<NoteLine> lines)
+    {
+        int expected = lines.Sum(l => l.Runs.Sum(r => r.Text.Count(c => !char.IsWhiteSpace(c))));
+        if (expected == 0) return false;
+        var actualText = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
+        int actual = actualText.Count(c => !char.IsWhiteSpace(c));
+        return actual < expected / 2;
+    }
+
+    // BodyRuns 폴백/구버전 호환: RTF(있으면) → 실패 시 plain Body → 둘 다 없으면 빈 문서.
+    private void LoadFromRtfOrPlain()
+    {
+        if (!string.IsNullOrEmpty(_sticker.BodyRtf))
+        {
+            try
+            {
+                using var ms = new System.IO.MemoryStream(Encoding.Latin1.GetBytes(_sticker.BodyRtf));
+                new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
+                    .Load(ms, DataFormats.Rtf);
+                return;
+            }
+            catch { }
+        }
+        BodyBox.Document.Blocks.Clear();
+        if (!string.IsNullOrEmpty(_sticker.Body))
+            BodyBox.Document.Blocks.Add(new Paragraph(new Run(_sticker.Body)));
     }
 
     private void NormalizeDocumentMargins()
@@ -601,37 +675,47 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _sticker.BodyRtf = Encoding.Latin1.GetString(rtfMs.ToArray());
 
         var lines = new List<string>();
-        foreach (var block in BodyBox.Document.Blocks)
+        EmitPlainBlocks(BodyBox.Document.Blocks, lines);
+        _sticker.Body = string.Join("\n", lines).TrimEnd('\n');
+        // 같은 문서에서 run 단위 서식 + depth도 추출 — push가 굵게/밑줄·중첩을 보내도록
+        _sticker.BodyRuns = NoteLineSerializer.Serialize(NoteLineExtractor.Extract(BodyBox.Document));
+    }
+
+    // plain Body 추출 — 중첩 포함, 깊이는 평탄(설계상 plain은 평면, 깊이는 BodyRuns가 정본).
+    private static void EmitPlainBlocks(BlockCollection blocks, List<string> lines)
+    {
+        foreach (var block in blocks)
         {
             if (block is Paragraph para)
-            {
                 lines.Add(new TextRange(para.ContentStart, para.ContentEnd).Text);
-            }
             else if (block is System.Windows.Documents.List list)
-            {
-                bool numbered = list.MarkerStyle == TextMarkerStyle.Decimal;
-                int n = 1;
-                foreach (var item in list.ListItems)
-                    foreach (var inner in item.Blocks)
-                        if (inner is Paragraph innerPara)
-                        {
-                            var text = new TextRange(innerPara.ContentStart, innerPara.ContentEnd).Text;
-                            // WPF RTF round-trip injects the marker char into paragraph text.
-                            // Strip it to avoid double markers in stored body text.
-                            if (!numbered && text.Length > 0 && text[0] == '•')
-                                text = text[1..].TrimStart('\t', ' ');
-                            else if (numbered)
-                            {
-                                var m2 = System.Text.RegularExpressions.Regex.Match(text, @"^\d+[.)]\s");
-                                if (m2.Success) text = text[m2.Length..];
-                            }
-                            lines.Add(numbered ? $"{n++}. {text}" : $"• {text}");
-                        }
-            }
+                EmitPlainList(list, lines);
         }
-        _sticker.Body = string.Join("\n", lines).TrimEnd('\n');
-        // 같은 문서에서 run 단위 서식도 추출 — push가 굵게/밑줄을 annotation으로 보내도록
-        _sticker.BodyRuns = NoteLineSerializer.Serialize(NoteLineExtractor.Extract(BodyBox.Document));
+    }
+
+    // 각 항목은 "• "/"N. " 접두. 마커가 텍스트에 샌 경우(RTF 왕복) 제거. 중첩 List는 재귀(평탄).
+    private static void EmitPlainList(System.Windows.Documents.List list, List<string> lines)
+    {
+        bool numbered = NoteLineDocumentBuilder.IsNumberedStyle(list.MarkerStyle);
+        int n = 1;
+        foreach (var item in list.ListItems)
+            foreach (var inner in item.Blocks)
+            {
+                if (inner is Paragraph innerPara)
+                {
+                    var text = new TextRange(innerPara.ContentStart, innerPara.ContentEnd).Text;
+                    if (!numbered && text.Length > 0 && text[0] == '•')
+                        text = text[1..].TrimStart('\t', ' ');
+                    else if (numbered)
+                    {
+                        var m2 = System.Text.RegularExpressions.Regex.Match(text, @"^\d+[.)]\s");
+                        if (m2.Success) text = text[m2.Length..];
+                    }
+                    lines.Add(numbered ? $"{n++}. {text}" : $"• {text}");
+                }
+                else if (inner is System.Windows.Documents.List nested)
+                    EmitPlainList(nested, lines);
+            }
     }
 
     private bool IsBodyEmpty()

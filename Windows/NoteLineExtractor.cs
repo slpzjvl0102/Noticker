@@ -13,23 +13,7 @@ public static class NoteLineExtractor
     {
         var lines = new List<NoteLine>();
         foreach (var block in doc.Blocks)
-        {
-            if (block is Paragraph para)
-            {
-                lines.Add(new NoteLine(NoteLineKind.Paragraph, ExtractRuns(para, listKind: null)));
-            }
-            else if (block is System.Windows.Documents.List list)
-            {
-                bool numbered = list.MarkerStyle == TextMarkerStyle.Decimal;
-                foreach (var item in list.ListItems)
-                    foreach (var inner in item.Blocks)
-                        if (inner is Paragraph innerPara)
-                        {
-                            var kind = numbered ? NoteLineKind.Number : NoteLineKind.Bullet;
-                            lines.Add(new NoteLine(kind, ExtractRuns(innerPara, kind)));
-                        }
-            }
-        }
+            WalkBlock(block, lines, depth: 0);
 
         // plain(Body) 경로의 TrimEnd('\n')와 대칭 — 뒤쪽 빈 paragraph 줄만 제거.
         // 특히 빈 문서가 [빈 paragraph 1줄]로 추출되면 plain 경로(블록 0개)와 달리
@@ -39,6 +23,36 @@ public static class NoteLineExtractor
             lines.RemoveAt(lines.Count - 1);
         return lines;
     }
+
+    // 블록 트리를 전위순회해 depth 태그 평면 리스트로 평탄화.
+    //   Paragraph        → 항상 depth 0 (단락은 중첩 개념 없음)
+    //   List ─ ListItem ─ Paragraph(직속)  → 현재 depth
+    //                   └ List(중첩)        → depth+1 재귀
+    private static void WalkBlock(Block block, List<NoteLine> lines, int depth)
+    {
+        if (block is Paragraph para)
+        {
+            lines.Add(new NoteLine(NoteLineKind.Paragraph, ExtractRuns(para, listKind: null)));
+        }
+        else if (block is System.Windows.Documents.List list)
+        {
+            var kind = IsNumbered(list.MarkerStyle) ? NoteLineKind.Number : NoteLineKind.Bullet;
+            foreach (var item in list.ListItems)
+                foreach (var inner in item.Blocks)
+                {
+                    if (inner is Paragraph innerPara)
+                        lines.Add(new NoteLine(kind, ExtractRuns(innerPara, kind), depth));
+                    else if (inner is System.Windows.Documents.List)
+                        WalkBlock(inner, lines, depth + 1);
+                }
+        }
+    }
+
+    // 깊이별 번호 마커 사이클(Decimal→LowerLatin→LowerRoman 등)도 번호로 인식.
+    // 그 외(Disc/Circle/Square/Box 등)는 불릿.
+    private static bool IsNumbered(TextMarkerStyle m) => m is
+        TextMarkerStyle.Decimal or TextMarkerStyle.LowerLatin or TextMarkerStyle.UpperLatin
+        or TextMarkerStyle.LowerRoman or TextMarkerStyle.UpperRoman;
 
     private static IReadOnlyList<NoteRun> ExtractRuns(Paragraph para, NoteLineKind? listKind)
     {

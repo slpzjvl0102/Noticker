@@ -7,7 +7,9 @@ public enum NoteLineKind { Paragraph, Bullet, Number }
 
 public sealed record NoteRun(string Text, bool Bold, bool Underline);
 
-public sealed record NoteLine(NoteLineKind Kind, IReadOnlyList<NoteRun> Runs);
+// Depth: 중첩 리스트 깊이 (0 = 최상위/단락). 단락은 항상 0. 하위호환 위해 기본값 0 —
+// depth 없던 구버전 body_runs JSON은 역직렬화 시 0으로 채워진다.
+public sealed record NoteLine(NoteLineKind Kind, IReadOnlyList<NoteRun> Runs, int Depth = 0);
 
 // Pure block-JSON → intermediate-model conversion for the pull direction.
 // No WPF/WinForms references — MTA xUnit testable.
