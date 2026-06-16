@@ -102,24 +102,23 @@ public partial class NotionImportWindow : Window
 
     private async Task ImportAsync(ImportItem item)
     {
-        var result0 = await _client.GetPageBlocksAsync(item.PageId, CancellationToken.None);
+        // pull과 동일한 재귀 트리 fetch — 중첩 리스트를 깊이 포함해 그대로 가져온다.
+        var result0 = await _client.GetPageBlockTreeAsync(item.PageId, CancellationToken.None);
         if (result0 is null)
         {
             MessageBox.Show("페이지를 읽을 수 없습니다 (삭제되었거나 권한 없음).",
                 "가져오기 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        var (blocks, hasMore) = result0.Value;
+        var (blocks, supported, unsupportedType) = result0.Value;
 
-        var (supported, unsupportedType) = NotionBlockConverter.CheckVocabulary(blocks);
         bool pullDisabled = false;
-        if (!supported || hasMore)
+        if (!supported)
         {
-            // 범위 밖 서식/100블록 초과 경고 — 동의해야 진행 (설계 premise 4).
-            // 100블록 초과는 잘린 본문을 push할 때 Notion의 초과 블록이 파괴되는 비대칭
-            var reason = hasMore ? "100블록 초과" : unsupportedType;
+            // 미지원 타입(이미지/표 등)·리스트 외 중첩·과대 페이지 — 동의해야 진행.
+            // 중첩 리스트는 이제 지원되므로 여기엔 안 옴 (premise 4).
             var result = MessageBox.Show(
-                $"이 페이지에는 지원되지 않는 내용이 있습니다 ({reason}).\n" +
+                $"이 페이지에는 지원되지 않는 내용이 있습니다 ({unsupportedType}).\n" +
                 "지원되는 텍스트만 가져오며, 이후 스티커를 수정하는 순간 " +
                 "Notion의 원본 내용이 스티커 내용으로 대체됩니다.\n\n계속할까요?",
                 "서식 경고", MessageBoxButton.YesNo, MessageBoxImage.Warning);

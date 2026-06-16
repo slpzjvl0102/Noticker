@@ -95,4 +95,60 @@ public class AnnotatedBlocksTests
                 .Select(i => rts[i].GetProperty("text").GetProperty("content").GetString())));
         Assert.False(rts[0].TryGetProperty("annotations", out _));
     }
+
+    // ── PR2: depth 태그 시퀀스 → 블록 forest (Notion 중첩 push의 트리 조립) ──
+
+    private static string TypeOf(NotionClient.BlockNode node) =>
+        JsonDocument.Parse(JsonSerializer.Serialize(node.Block))
+            .RootElement.GetProperty("type").GetString()!;
+
+    [Fact]
+    public void BuildForest_NestsByDepth()
+    {
+        var forest = NotionClient.BuildForest(
+        [
+            new(NoteLineKind.Bullet, [new NoteRun("부모", false, false)], 0),
+            new(NoteLineKind.Bullet, [new NoteRun("자식", false, false)], 1),
+            new(NoteLineKind.Bullet, [new NoteRun("손자", false, false)], 2),
+            new(NoteLineKind.Bullet, [new NoteRun("다시", false, false)], 0),
+            new(NoteLineKind.Number, [new NoteRun("번호", false, false)], 1),
+        ]);
+
+        Assert.Equal(2, forest.Count);                          // 루트 2 (부모, 다시)
+        Assert.Equal("bulleted_list_item", TypeOf(forest[0]));
+        Assert.Single(forest[0].Children);                       // 부모 → 자식
+        Assert.Single(forest[0].Children[0].Children);           // 자식 → 손자
+        Assert.Empty(forest[0].Children[0].Children[0].Children); // 손자 leaf
+
+        Assert.Single(forest[1].Children);                       // 다시 → 번호
+        Assert.Equal("numbered_list_item", TypeOf(forest[1].Children[0]));
+    }
+
+    [Fact]
+    public void BuildForest_DepthJump_ClampsToDeepestAvailable()
+    {
+        // depth 0 → 2 (1 건너뜀) — 2를 가능한 가장 깊은 곳(depth 1)에 붙여 방어
+        var forest = NotionClient.BuildForest(
+        [
+            new(NoteLineKind.Bullet, [new NoteRun("a", false, false)], 0),
+            new(NoteLineKind.Bullet, [new NoteRun("b", false, false)], 2),
+        ]);
+
+        Assert.Single(forest);
+        Assert.Single(forest[0].Children);   // b가 a의 자식으로 클램프
+    }
+
+    [Fact]
+    public void BuildForest_FlatLines_AllRoots()
+    {
+        var forest = NotionClient.BuildForest(
+        [
+            new(NoteLineKind.Bullet, [new NoteRun("1", false, false)]),
+            new(NoteLineKind.Bullet, [new NoteRun("2", false, false)]),
+            new(NoteLineKind.Paragraph, [new NoteRun("3", false, false)]),
+        ]);
+
+        Assert.Equal(3, forest.Count);
+        Assert.All(forest, n => Assert.Empty(n.Children));
+    }
 }

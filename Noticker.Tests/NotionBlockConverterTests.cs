@@ -333,4 +333,40 @@ public class NotionBlockConverterTests
             """);
         Assert.False(NotionBlockConverter.HasUnsupportedAnnotations(blocks));
     }
+
+    // ── ToLines(depth 태그) — 재귀 fetch 결과를 중첩 NoteLine으로 (PR3) ──
+
+    [Fact]
+    public void ToLines_DepthTagged_PreservesKindAndDepth()
+    {
+        var blocks = new List<NotionBlockConverter.PulledBlock>
+        {
+            new(Parse(Block("bulleted_list_item", "부모")), 0),
+            new(Parse(Block("bulleted_list_item", "자식")), 1),
+            new(Parse(Block("numbered_list_item", "번호손자")), 2),
+        };
+
+        var lines = NotionBlockConverter.ToLines(blocks);
+
+        Assert.Equal(3, lines.Count);
+        Assert.Equal((NoteLineKind.Bullet, 0, "부모"), (lines[0].Kind, lines[0].Depth, lines[0].Runs[0].Text));
+        Assert.Equal((NoteLineKind.Bullet, 1, "자식"), (lines[1].Kind, lines[1].Depth, lines[1].Runs[0].Text));
+        Assert.Equal((NoteLineKind.Number, 2, "번호손자"), (lines[2].Kind, lines[2].Depth, lines[2].Runs[0].Text));
+    }
+
+    [Fact]
+    public void ToLines_DepthTagged_ParagraphForcedToDepthZero()
+    {
+        // 단락은 깊이 개념이 없으므로 depth가 들어와도 0으로 정규화
+        var blocks = new List<NotionBlockConverter.PulledBlock>
+        {
+            new(Parse(Block("paragraph", "단락")), 3),
+        };
+
+        var lines = NotionBlockConverter.ToLines(blocks);
+
+        Assert.Single(lines);
+        Assert.Equal(NoteLineKind.Paragraph, lines[0].Kind);
+        Assert.Equal(0, lines[0].Depth);
+    }
 }

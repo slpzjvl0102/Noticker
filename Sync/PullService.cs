@@ -147,7 +147,9 @@ public class PullService
                         }
 
                         await Task.Delay(350, ct);      // 오프라인 복귀 burst의 rate limit 페이싱
-                        var result = await _client.GetPageBlocksAsync(p.PageId, ct);
+                        // 중첩 포함 전체 트리를 재귀 fetch(페이지네이션·depth 포함). 수 초 걸릴 수 있으나
+                        // 아래 가드 재검사가 그 사이 사용자 입력을 잡아 클로버를 막는다.
+                        var result = await _client.GetPageBlockTreeAsync(p.PageId, ct);
                         if (result is null)
                         {
                             // 404 — push의 기존 재생성 정책에 맡김
@@ -155,9 +157,9 @@ public class PullService
                             break;
                         }
 
-                        // 가드 재검사 — 위 Decide와 여기 사이의 await 동안 메시지 펌프가
+                        // 가드 재검사 — 위 Decide와 여기 사이의 (긴) 재귀 fetch 동안 메시지 펌프가
                         // 사용자 입력을 처리했을 수 있음. 스테일 가드로 적용하면 그 사이의
-                        // 키 입력이 클로버됨 (검증 리뷰 critical F1)
+                        // 키 입력이 클로버됨 (검증 리뷰 critical F1). fetch가 길어도 여기서 전부 차단.
                         if (win.IsKeyboardFocusWithin || win.IsSyncPending ||
                             s.SyncState is "pending" or "conflict")
                         {
@@ -165,11 +167,10 @@ public class PullService
                             continue;
                         }
 
-                        var (supported, _) = NotionBlockConverter.CheckVocabulary(result.Value.Blocks);
-                        if (!supported || result.Value.HasMore)
+                        if (!result.Value.Supported)
                         {
-                            // 범위 밖 또는 100블록 초과(잘린 본문을 push하면 Notion 쪽
-                            // 초과 블록이 파괴됨) — pull 영구 중단 + ack
+                            // 미지원 타입/리스트 외 중첩(toggle 등) — pull 영구 중단 + ack.
+                            // (HasMore는 더 이상 사유 아님 — 재귀 fetch가 페이지네이션을 모두 처리)
                             s.PullDisabled = true;
                             _repo.SetPullDisabled(s.Id, true);
                             Ack(s, p);

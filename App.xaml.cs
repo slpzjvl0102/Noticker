@@ -57,6 +57,14 @@ public partial class App : System.Windows.Application
 
         if (!InitDatabase()) return;
 
+        // 일회성 self-heal: 중첩 리스트 지원 전 has_children 때문에 PullDisabled된 스티커를 재활성.
+        // 진짜 미지원(이미지/표 등)은 다음 pull에서 다시 비활성되므로 안전.
+        if (SettingsRepo!.Get("pulldisabled_reset_nesting_v1") is null)
+        {
+            StickerRepo!.ClearAllPullDisabled();
+            SettingsRepo.Set("pulldisabled_reset_nesting_v1", "1");
+        }
+
         AppSettings.Instance.IsSyncPaused = false;
         _notionClient = new NotionClient(AppSettings.Instance);
         SyncQueue = new SyncQueue(StickerRepo!, _notionClient, AppSettings.Instance);

@@ -304,6 +304,23 @@ public class StickerRepository
         }
     }
 
+    // 비활성된 모든 스티커의 pull_disabled 해제 — 중첩 지원 추가 시 1회 self-heal 용도.
+    // 진짜 미지원(이미지/표 등)은 다음 pull에서 다시 비활성되므로 안전.
+    public int ClearAllPullDisabled()
+    {
+        try
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE stickers SET pull_disabled = 0 WHERE pull_disabled = 1";
+            return cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new InvalidOperationException($"SQLite clear pull disabled failed: {ex.Message}", ex);
+        }
+    }
+
     private SqliteConnection Open()
     {
         var conn = new SqliteConnection(_connectionString);

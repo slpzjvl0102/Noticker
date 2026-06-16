@@ -51,39 +51,37 @@ public class NotionClient
             new AuthenticationHeaderValue("Bearer", _settings.NotionToken);
     }
 
-    // Creates a new Notion page with title, category, and body as page content blocks.
+    // Creates an EMPTY Notion page (properties only) and returns its id.
+    // 본문은 호출자가 id를 영속한 뒤 SyncBodyAsync로 채운다 — 생성과 본문을 분리해야
+    // 본문 append 실패 시 재시도가 UpdatePage 경로를 타 빈 페이지가 중복 생성되지 않는다.
     public async Task<string> CreatePageAsync(Sticker s, CancellationToken ct)
     {
         SetAuth();
-
-        var props = BuildProperties(s);
-        var children = BuildBodyBlocks(s);
-
-        var payload = new { parent = new { database_id = _settings.TargetDbId }, properties = props, children };
+        var payload = new { parent = new { database_id = _settings.TargetDbId }, properties = BuildProperties(s) };
         var response = await PostAsync("/pages", payload, ct);
-
-        var id = response.RootElement.GetProperty("id").GetString()
+        return response.RootElement.GetProperty("id").GetString()
             ?? throw new InvalidOperationException("Notion response missing 'id' field.");
-        return id;
     }
 
-    // Updates title/category and replaces all page body blocks with current body text.
+    // Updates title/category and replaces all page body blocks with current body (중첩 포함).
     public async Task UpdatePageAsync(Sticker s, CancellationToken ct)
     {
         SetAuth();
-
-        // 1. Update title and category properties
+        // 1. 제목/카테고리 속성 갱신
         await PatchAsync($"/pages/{s.NotionPageId}", new { properties = BuildProperties(s) }, ct);
-
-        // 2. Delete all existing body blocks
+        // 2. 기존 본문 블록 전체 삭제
         var blockIds = await GetChildBlockIdsAsync(s.NotionPageId!, ct);
         foreach (var blockId in blockIds)
             await DeleteBlockAsync(blockId, ct);
+        // 3. 현재 본문을 중첩 트리로 재구성해 append
+        await SyncBodyAsync(s, ct);
+    }
 
-        // 3. Append new paragraph blocks if body is non-empty
-        var blocks = BuildBodyBlocks(s);
-        if (blocks.Length > 0)
-            await PatchAsync($"/blocks/{s.NotionPageId}/children", new { children = blocks }, ct);
+    // 본문(BodyRuns/평면 폴백)을 중첩 트리로 만들어 페이지 아래에 재귀 append.
+    public async Task SyncBodyAsync(Sticker s, CancellationToken ct)
+    {
+        SetAuth();
+        await AppendForestAsync(s.NotionPageId!, BuildBodyForest(s), ct);
     }
 
     // Fetches options for the configured Category property (select or multi_select).
@@ -211,6 +209,77 @@ public class NotionClient
         if (doc is null) return null;
         return (doc.RootElement.GetProperty("results").Clone(),
                 doc.RootElement.GetProperty("has_more").GetBoolean());
+    }
+
+    // 재귀 pull이 누적할 수 있는 최대 블록 수 — 초과하면 pull 중단(UI 루프 점유 방지).
+    private const int MaxPulledBlocks = 400;
+
+    // 페이지 본문을 재귀로 전부 가져온다 — 리스트 항목의 has_children를 따라 내려가며 depth를 매기고,
+    // 각 레벨은 cursor로 페이지네이션. paginated이므로 100블록 초과여도 잘림이 없다 → HasMore는 더 이상
+    // pull 중단 사유가 아니다. 미지원 타입/리스트 외 중첩(toggle 등)을 만나면 Supported=false로 보고.
+    // 404면 null. UI 스레드와 무관(순수 HTTP).
+    public async Task<(List<NotionBlockConverter.PulledBlock> Blocks, bool Supported, string? UnsupportedType)?>
+        GetPageBlockTreeAsync(string pageId, CancellationToken ct)
+    {
+        SetAuth();
+        var probe = await GetOrNullOn404Async($"/blocks/{pageId}/children?page_size=100", ct);
+        if (probe is null) return null;
+
+        var acc = new List<NotionBlockConverter.PulledBlock>();
+        var (ok, unsupported) = await CollectLevelAsync(pageId, 0, acc, firstDoc: probe, ct);
+        return (acc, ok, unsupported);
+    }
+
+    // 한 블록의 자식 레벨을 전위순회로 acc에 누적. 리스트 항목의 has_children만 재귀(그 외 중첩은 미지원).
+    // firstDoc: depth 0 첫 페이지는 404 프로브 결과를 재사용(요청 1회 절약).
+    private async Task<(bool ok, string? unsupported)> CollectLevelAsync(
+        string blockId, int depth, List<NotionBlockConverter.PulledBlock> acc,
+        JsonDocument? firstDoc, CancellationToken ct)
+    {
+        string? cursor = null;
+        var doc = firstDoc;
+        while (true)
+        {
+            if (doc is null)
+            {
+                await Task.Delay(350, ct);   // rate limit 페이싱
+                var path = $"/blocks/{blockId}/children?page_size=100" +
+                           (cursor is not null ? $"&start_cursor={cursor}" : "");
+                doc = await GetAsync(path, ct);
+            }
+            var root = doc.RootElement;
+            foreach (var block in root.GetProperty("results").EnumerateArray())
+            {
+                var type = block.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
+                    ? t.GetString() : null;
+                bool isList = type is "bulleted_list_item" or "numbered_list_item";
+                bool hasChildren = block.TryGetProperty("has_children", out var hc) &&
+                                   hc.ValueKind == JsonValueKind.True;
+
+                if (type is not ("paragraph" or "bulleted_list_item" or "numbered_list_item"))
+                    return (false, type ?? "unknown");
+                if (hasChildren && !isList)
+                    return (false, "nested " + type);
+
+                acc.Add(new NotionBlockConverter.PulledBlock(block.Clone(), depth));
+                // 총 블록 상한 — 병적으로 큰 페이지가 재귀 fetch로 UI 루프를 수 분 점유하는 것 방지.
+                // 초과 시 pull 중단(옛 100블록 천장의 대체). 초과 본문은 push 쪽도 안전.
+                if (acc.Count > MaxPulledBlocks)
+                    return (false, $"too many blocks (>{MaxPulledBlocks})");
+
+                if (hasChildren && isList)
+                {
+                    var childId = block.GetProperty("id").GetString()!;
+                    var (cok, cuns) = await CollectLevelAsync(childId, depth + 1, acc, firstDoc: null, ct);
+                    if (!cok) return (false, cuns);
+                }
+            }
+            if (!root.GetProperty("has_more").GetBoolean()) break;
+            cursor = root.GetProperty("next_cursor").GetString();
+            if (cursor is null) break;
+            doc = null;
+        }
+        return (true, null);
     }
 
     // ── 온보딩 프로브 ──────────────────────────────────────────────────────────
@@ -351,57 +420,108 @@ public class NotionClient
         return props;
     }
 
-    // BodyRuns(NoteLine JSON)가 있으면 서식 보존 블록, 없거나 깨졌으면 기존 plain 경로 —
-    // 폴백이 push 자체를 보장한다 (기존 스티커는 다음 편집에서 BodyRuns가 생긴다)
-    private static object[] BuildBodyBlocks(Sticker s)
+    // 본문(BodyRuns/평면 폴백)을 depth 태그 블록 트리(forest)로 — push가 중첩 List를 Notion
+    // 네이티브 중첩으로 보내도록. BodyRuns 없거나 깨지면 plain 평면 폴백.
+    private static List<BlockNode> BuildBodyForest(Sticker s)
     {
         var lines = NoteLineSerializer.Deserialize(s.BodyRuns);
-        if (lines is not null) return BuildAnnotatedBlocks(lines);
+        if (lines is not null) return BuildForest(lines);
         if (!string.IsNullOrEmpty(s.BodyRuns))
             SyncLog.Write($"push: body_runs 역직렬화 실패 — plain 폴백 (sticker={s.Id[..Math.Min(8, s.Id.Length)]})");
-        return BuildParagraphBlocks(s.Body);
+        return BuildParagraphBlocks(s.Body).Select(b => new BlockNode(b)).ToList();   // 평면(depth 0)
+    }
+
+    // 블록 트리 노드 — Notion 블록(children 키 없음) + 자식 노드.
+    public sealed class BlockNode(object block)
+    {
+        public object Block { get; } = block;
+        public List<BlockNode> Children { get; } = [];
+    }
+
+    // depth 태그 NoteLine 시퀀스 → 블록 forest. depth d 줄은 직전 depth d-1 노드의 자식.
+    // 깊이 점프(d > 스택 깊이)는 가능한 가장 깊은 곳에 붙여 방어.
+    public static List<BlockNode> BuildForest(IReadOnlyList<NoteLine> lines)
+    {
+        var roots = new List<BlockNode>();
+        var stack = new List<BlockNode>();   // stack[i] = 현재 열린 depth-i 노드
+        foreach (var line in lines)
+        {
+            int d = line.Depth < 0 ? 0 : line.Depth;
+            if (d > stack.Count) d = stack.Count;
+            var node = new BlockNode(MakeBlock(line));
+            if (d == 0) roots.Add(node);
+            else stack[d - 1].Children.Add(node);
+            if (stack.Count > d) stack.RemoveRange(d, stack.Count - d);
+            stack.Add(node);   // stack[d] = node
+        }
+        return roots;
+    }
+
+    // forest를 부모 아래에 한 레벨씩 append하고, 응답의 block id로 각 노드의 자식을 재귀 append.
+    // Notion은 요청당 children 100개·중첩 2레벨 한도라, 한 레벨씩 올리면 임의 깊이를 안전히 처리하고
+    // 각 블록 id를 응답에서 받아 자식의 부모로 쓸 수 있다.
+    // 페이싱(Task.Delay)을 두지 않는다 — UpdatePage의 삭제+다중 append가 페이싱으로 수 초 걸리면
+    // 그동안 사람이 Notion에서 끼어든 편집을 봇의 마지막 쓰기가 조용히 덮는 TOCTOU 창이 넓어진다.
+    // 빠르게 몰아쳐 창을 단일요청 수준으로 좁히고, 429는 SyncQueue가 백오프·재시도로 처리한다.
+    private async Task AppendForestAsync(string parentId, IReadOnlyList<BlockNode> nodes, CancellationToken ct)
+    {
+        if (nodes.Count == 0) return;
+
+        var ids = new List<string>(nodes.Count);
+        for (int i = 0; i < nodes.Count; i += 100)
+        {
+            var chunk = nodes.Skip(i).Take(100).Select(n => n.Block).ToArray();
+            var resp = await PatchAsync($"/blocks/{parentId}/children", new { children = chunk }, ct);
+            foreach (var b in resp.RootElement.GetProperty("results").EnumerateArray())
+                ids.Add(b.GetProperty("id").GetString()!);
+        }
+
+        for (int i = 0; i < nodes.Count; i++)
+            if (nodes[i].Children.Count > 0)
+                await AppendForestAsync(ids[i], nodes[i].Children, ct);
     }
 
     // run 단위 rich_text 블록 — annotations는 굵게/밑줄 중 하나라도 있을 때만 포함
     // (Notion 기본값이 모두 false라 생략 가능, payload 절약). 2000자 청크는 run 단위 분할.
     public static object[] BuildAnnotatedBlocks(IReadOnlyList<NoteLine> lines)
+        => lines.Select(MakeBlock).ToArray();
+
+    // 단일 NoteLine → Notion 블록(children 키 없음 — 중첩은 BuildForest/AppendForest가 처리).
+    private static object MakeBlock(NoteLine line)
     {
-        return lines.Select(line =>
+        var richText = line.Runs
+            .Where(r => !string.IsNullOrEmpty(r.Text))
+            .SelectMany(r => SplitIntoChunks(r.Text, ChunkSize)
+                .Select(c => MakeRichText(c, r.Bold, r.Underline)))
+            .ToArray();
+
+        // Notion 한도: 블록당 rich_text 100개 — 초과 시 그 줄만 평문 강등 (400 방지)
+        if (richText.Length > 100)
         {
-            var richText = line.Runs
-                .Where(r => !string.IsNullOrEmpty(r.Text))
-                .SelectMany(r => SplitIntoChunks(r.Text, ChunkSize)
-                    .Select(c => MakeRichText(c, r.Bold, r.Underline)))
+            var flat = string.Concat(line.Runs.Select(r => r.Text));
+            richText = SplitIntoChunks(flat, ChunkSize)
+                .Select(c => MakeRichText(c, bold: false, underline: false))
                 .ToArray();
+        }
 
-            // Notion 한도: 블록당 rich_text 100개 — 초과 시 그 줄만 평문 강등 (400 방지)
-            if (richText.Length > 100)
+        return line.Kind switch
+        {
+            NoteLineKind.Bullet => (object)new
             {
-                var flat = string.Concat(line.Runs.Select(r => r.Text));
-                richText = SplitIntoChunks(flat, ChunkSize)
-                    .Select(c => MakeRichText(c, bold: false, underline: false))
-                    .ToArray();
-            }
-
-            return line.Kind switch
+                type = "bulleted_list_item",
+                bulleted_list_item = new { rich_text = richText }
+            },
+            NoteLineKind.Number => new
             {
-                NoteLineKind.Bullet => (object)new
-                {
-                    type = "bulleted_list_item",
-                    bulleted_list_item = new { rich_text = richText }
-                },
-                NoteLineKind.Number => new
-                {
-                    type = "numbered_list_item",
-                    numbered_list_item = new { rich_text = richText }
-                },
-                _ => new
-                {
-                    type = "paragraph",
-                    paragraph = new { rich_text = richText }
-                },
-            };
-        }).ToArray();
+                type = "numbered_list_item",
+                numbered_list_item = new { rich_text = richText }
+            },
+            _ => new
+            {
+                type = "paragraph",
+                paragraph = new { rich_text = richText }
+            },
+        };
     }
 
     private static object MakeRichText(string content, bool bold, bool underline) =>

@@ -99,6 +99,10 @@ public class SyncQueue
             {
                 var pageId = await _client.CreatePageAsync(s, ct);
                 s.NotionPageId = pageId;
+                // 페이지 생성 직후 id 영속 — 본문 append가 실패해도 재시도가 UpdatePage 경로를
+                // 타서 빈 페이지가 중복 생성되지 않는다 (create/body 비원자성 가드)
+                _repo.UpdateSyncState(s.Id, "pending", pageId, s.RetryCount);
+                await _client.SyncBodyAsync(s, ct);
             }
             else
             {
