@@ -50,6 +50,16 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         DataContext = this;
 
+        // IME 조합 상태 추적 — 조합 중엔 문서 직렬화/셀렉션 읽기를 차단한다(아래 핸들러 참고).
+        // RichTextBox가 내부에서 이벤트를 handled 처리하므로 handledEventsToo=true로 받는다.
+        BodyBox.AddHandler(TextCompositionManager.TextInputStartEvent,
+            new TextCompositionEventHandler(BodyBox_TextInputStart), true);
+        BodyBox.AddHandler(TextCompositionManager.TextInputUpdateEvent,
+            new TextCompositionEventHandler(BodyBox_TextInputUpdate), true);
+        BodyBox.AddHandler(TextCompositionManager.TextInputEvent,
+            new TextCompositionEventHandler(BodyBox_TextInput), true);
+        BodyBox.LostKeyboardFocus += (_, _) => { _imeComposing = false; FlushPendingBodySave(); };
+
         // Fix paragraph spacing via FlowDocument.Resources (more reliable than RichTextBox.Resources)
         var paraStyle = new Style(typeof(Paragraph));
         paraStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0)));
@@ -241,11 +251,24 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _debounce.OnChanged(_sticker);
     }
 
+    private bool _imeComposing;
+    private bool _bodyUpdatePending;
+
     private void BodyBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
+        // IME 조합 진행 중에는 문서를 만지지 않는다. SaveContent의 range.Save(Rtf)·TextRange 읽기가
+        // 조합을 강제 확정시켜 복합 음절(쌍모음·겹받침)을 깨뜨린다(공백 뒤 글자 탈락 포함).
+        // 조합이 commit(TextInput)될 때 일괄 반영한다. (dotnet/wpf#7397 환경에서의 우회)
+        if (_imeComposing) { _bodyUpdatePending = true; return; }
+        RunBodyUpdate();
+    }
+
+    // 조합이 끝났거나 일반(비-IME) 입력일 때만 실제 문서 작업 수행 — 조합 중엔 절대 호출 안 함
+    private void RunBodyUpdate()
+    {
+        _bodyUpdatePending = false;
         // Normalize any newly created List blocks (Document.Resources may not catch all cases)
-        // Margin changes don't trigger TextChanged, so this is safe from re-entrancy.
         foreach (var block in BodyBox.Document.Blocks)
             if (block is System.Windows.Documents.List lst && lst.Margin.Left != 20)
             {
@@ -259,11 +282,35 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         SyncFormattingButtons();
     }
 
+    // ── IME 조합 상태 추적 ──
+    // 모던 한글 IME는 자모 입력마다 조합을 갱신한다. 조합 중 문서 직렬화/셀렉션 읽기는 조합을
+    // 깨므로, 조합 시작~갱신 동안 부수효과를 차단(_imeComposing)하고 commit 시 일괄 반영한다.
+    private void BodyBox_TextInputStart(object sender, TextCompositionEventArgs e) => _imeComposing = true;
+    private void BodyBox_TextInputUpdate(object sender, TextCompositionEventArgs e) => _imeComposing = true;
+    private void BodyBox_TextInput(object sender, TextCompositionEventArgs e)
+    {
+        _imeComposing = false;
+        // commit 직후 트레일링 TextChanged가 보통 따라오지만, 없을 수도 있으니 pending이면 직접 실행
+        if (_bodyUpdatePending) RunBodyUpdate();
+    }
+
+    // 닫기/종료/포커스 이탈 시 조합 중 미반영분이 남아 있으면 동기 flush
+    private void FlushPendingBodySave()
+    {
+        if (_bodyUpdatePending) RunBodyUpdate();
+    }
+
     // 전역 단축키 생성 경로 — 즉시 타이핑 가능하게 본문에 포커스 (App.OnHotkeyPressed)
     public void FocusBody() => BodyBox.Focus();
 
-    private void BodyBox_SelectionChanged(object sender, RoutedEventArgs e) =>
+    private void BodyBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        // 조합 중에는 캐럿이 자모마다 움직여 반복 발화한다. SyncFormattingButtons가 Selection/
+        // CaretPosition을 읽으면 조합을 확정·교란하므로 차단 — 조합 종료 후 RunBodyUpdate가
+        // 버튼 상태를 맞춘다. (조합이 아닐 땐 즉시 갱신해 툴바 반응성 유지)
+        if (_imeComposing) return;
         SyncFormattingButtons();
+    }
 
     private void BoldButton_Click(object sender, RoutedEventArgs e)
     {
@@ -427,6 +474,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        FlushPendingBodySave();
         if (App.Current.IsShuttingDown || _realClose)
         {
             _debounce.Cancel();
