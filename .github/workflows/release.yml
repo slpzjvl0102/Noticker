@@ -1,0 +1,56 @@
+# 새 버전 배포: Noticker.csproj의 <Version>을 올려 main에 merge한 뒤,
+# GitHub → Actions → Release → Run workflow를 누르면 됩니다.
+# 테스트 → publish → Velopack 패키지(Setup.exe, 업데이트용 nupkg) → GitHub Release v<Version> 생성까지 자동으로 합니다.
+# 설치된 Noticker는 이 Release를 보고 스스로 업데이트합니다.
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          [xml]$proj = Get-Content Noticker.csproj
+          $v = @($proj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ })[0]
+          if (-not $v) { throw "Noticker.csproj에 <Version>이 없습니다." }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "배포 버전: v$v" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Test
+        run: dotnet test Noticker.Tests/Noticker.Tests.csproj -c Release -nologo
+
+      - name: Publish
+        run: dotnet publish Noticker.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=false -o publish -nologo
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      # 이전 Release를 받아 두면 바뀐 부분만 담은 delta 패키지가 만들어집니다 (첫 배포 때는 없어도 됨)
+      - name: Download previous release
+        continue-on-error: true
+        run: vpk download github --repoUrl ${{ github.server_url }}/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} -o releases
+
+      - name: Pack
+        run: vpk pack -u Noticker -v ${{ steps.ver.outputs.version }} -p publish -e Noticker.exe --packTitle Noticker -i Assets/noticker.ico -o releases
+
+      - name: Upload GitHub Release
+        run: vpk upload github --repoUrl ${{ github.server_url }}/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} -o releases --publish --releaseName "Noticker ${{ steps.ver.outputs.version }}" --tag v${{ steps.ver.outputs.version }}

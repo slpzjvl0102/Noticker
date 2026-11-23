@@ -345,6 +345,7 @@ public partial class App : System.Windows.Application
         _pomodoroTimer?.Stop();      // 트레이 dispose 전에 정지 — disposed NotifyIcon 쓰기 방지
         _cts.Cancel();
         _retryTimer?.Stop();
+        _updateTimer?.Stop();
         _hotkey?.Dispose();
         _trayIcon?.Dispose();
         _trayIcon = null;

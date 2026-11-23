@@ -56,6 +56,7 @@ public partial class App
         menu.Items.Add("수동 Sync", null, async (_, _) => await RetryPendingAsync());
         menu.Items.Add("설정", null, (_, _) => OpenSettings());
         menu.Items.Add(new ToolStripSeparator());
+        InitUpdater(menu, menu.Items.Count);
         menu.Items.Add("종료", null, (_, _) => ExitApp());
 
         _trayIcon.ContextMenuStrip = menu;
