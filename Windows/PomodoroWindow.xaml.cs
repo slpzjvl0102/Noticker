@@ -54,6 +54,7 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
         _persistDebounce.Tick += (_, _) => { _persistDebounce.Stop(); PersistCustomMinutes(); };
 
         Topmost = AppSettings.Instance.PomodoroAlwaysOnTop;
+        ShowInTaskbar = AppSettings.Instance.ShowInTaskbar;
         PinButton.IsChecked = Topmost;
 
         RestorePosition();
@@ -367,5 +368,7 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
             _dotsKey = (-1, -1, false);                // 테마 전환 시 도트 브러시 재생성 강제
             RebuildDots();
         }
+        else if (e.PropertyName == nameof(AppSettings.ShowInTaskbar))
+            ShowInTaskbar = AppSettings.Instance.ShowInTaskbar;
     }
 }

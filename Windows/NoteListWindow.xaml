@@ -4,7 +4,7 @@
         Title="스티커 메모" Width="320" Height="500"
         MinWidth="240" MinHeight="300"
         WindowStyle="SingleBorderWindow"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
         ResizeMode="CanResize">
     <DockPanel x:Name="RootPanel">
         <!-- 검색 — 밑줄(line-style) -->

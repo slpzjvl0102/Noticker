@@ -32,7 +32,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     public event EventHandler? RealClosed;
 
     // pull의 dirty 가드용 — debounce 대기 중이면 pull이 이 스티커를 건너뜀
-    public bool IsSyncPending => _debounce.IsPending;
+    // 본문 저장 디바운스 대기도 dirty로 본다 — 미저장 편집을 pull이 덮어쓰지 않도록
+    public bool IsSyncPending => _debounce.IsPending || _contentSaveTimer?.IsEnabled == true;
 
     // 백그라운드 sync 전이(conflict 등) 후 App이 dispatcher에서 점/툴팁 갱신용으로 호출
     public void RefreshSyncIndicator() => UpdateSyncIndicator();
@@ -45,7 +46,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         _sticker = sticker;
         _repo = repo;
-        _debounce = new DebouncedSyncService(queue);
+        _debounce = new DebouncedSyncService(queue, FlushPendingContentSave);
 
         InitializeComponent();
         DataContext = this;
@@ -58,7 +59,12 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             new TextCompositionEventHandler(BodyBox_TextInputUpdate), true);
         BodyBox.AddHandler(TextCompositionManager.TextInputEvent,
             new TextCompositionEventHandler(BodyBox_TextInput), true);
-        BodyBox.LostKeyboardFocus += (_, _) => { _imeComposing = false; FlushPendingBodySave(); };
+        BodyBox.LostKeyboardFocus += (_, _) =>
+        {
+            _imeComposing = false;
+            FlushPendingBodySave();
+            FlushPendingContentSave();
+        };
 
         // Fix paragraph spacing via FlowDocument.Resources (more reliable than RichTextBox.Resources)
         var paraStyle = new Style(typeof(Paragraph));
@@ -72,6 +78,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         BodyBox.Document.Resources[typeof(System.Windows.Documents.List)] = listStyle;
 
         AppSettings.Instance.PropertyChanged += OnAppSettingsChanged;
+        ShowInTaskbar = AppSettings.Instance.ShowInTaskbar;
 
         RefreshCategoryOptions();
         CategoryBox.SelectedValue = _sticker.Category;
@@ -107,7 +114,17 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     public string StickerTitle
     {
         get => _sticker.Title;
-        set { _sticker.Title = value; Notify(nameof(StickerTitle)); }
+        set { _sticker.Title = value; NotifyTitle(); }
+    }
+
+    // 작업표시줄/Alt+Tab 라벨 — 제목 없는 스티커는 앱 이름
+    public string WindowTitle =>
+        string.IsNullOrWhiteSpace(_sticker.Title) ? "Noticker" : _sticker.Title;
+
+    private void NotifyTitle()
+    {
+        Notify(nameof(StickerTitle));
+        Notify(nameof(WindowTitle));
     }
 
     public string? Category
@@ -185,14 +202,28 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _sticker.NotionPageId is null &&
         string.IsNullOrEmpty(_sticker.Title) && string.IsNullOrEmpty(_sticker.Body);
 
+    // 상태색은 고정값 — 갱신마다 새 브러시를 만들지 않도록 Freeze된 공유 인스턴스 사용
+    private static SolidColorBrush Frozen(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
+    private static readonly SolidColorBrush _dotEmpty    = Frozen(0x9C, 0xA3, 0xAF);
+    private static readonly SolidColorBrush _dotSynced   = Frozen(0x22, 0xC5, 0x5E);
+    private static readonly SolidColorBrush _dotFailed   = Frozen(0xEF, 0x44, 0x44);
+    private static readonly SolidColorBrush _dotConflict = Frozen(0xFF, 0x8C, 0x00);
+    private static readonly SolidColorBrush _dotPending  = Frozen(0xF5, 0x9E, 0x0B);
+
     public Brush SyncDotColor => IsEmptyUnsynced
-        ? new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))
+        ? _dotEmpty
         : _sticker.SyncState switch
         {
-            "synced"   => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
-            "failed"   => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
-            "conflict" => new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00)),
-            _          => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
+            "synced"   => _dotSynced,
+            "failed"   => _dotFailed,
+            "conflict" => _dotConflict,
+            _          => _dotPending,
         };
 
     public string SyncTooltip => IsEmptyUnsynced
@@ -208,25 +239,14 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Char counter ───────────────────────────────────────────────────────────
 
-    public string CharCounterText
-    {
-        get
-        {
-            if (BodyBox == null) return "0자";
-            var t = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
-            return $"{t.Length:N0}자";
-        }
-    }
+    // 본문 글자수 캐시 — RefreshBodyTextState가 문서 텍스트를 한 번만 읽어 갱신한다.
+    // (이전엔 키 입력마다 카운터 텍스트·표시 여부·placeholder가 각각 전체 문서를 다시 읽었음)
+    private int _bodyTextLength;
 
-    public Visibility CharCounterVisibility
-    {
-        get
-        {
-            if (BodyBox == null) return Visibility.Collapsed;
-            var t = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
-            return t.Length >= 1800 ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
+    public string CharCounterText => $"{_bodyTextLength:N0}자";
+
+    public Visibility CharCounterVisibility =>
+        _bodyTextLength >= 1800 ? Visibility.Visible : Visibility.Collapsed;
 
     // ── Event handlers ─────────────────────────────────────────────────────────
 
@@ -234,6 +254,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         if (e.OriginalSource is System.Windows.Controls.Button) return;
         DragMove();
+        _positionSaveTimer?.Stop();   // 드래그 종료 시점 위치를 즉시 확정 — 대기 중 저장은 불필요
         SavePosition();
     }
 
@@ -246,7 +267,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         if (_loading) return;
         _sticker.Title = TitleBox.Text;
-        Notify(nameof(StickerTitle));
+        NotifyTitle();
         SaveContent();
         _debounce.OnChanged(_sticker);
     }
@@ -268,17 +289,10 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     private void RunBodyUpdate()
     {
         _bodyUpdatePending = false;
-        // Normalize any newly created List blocks (Document.Resources may not catch all cases)
-        foreach (var block in BodyBox.Document.Blocks)
-            if (block is System.Windows.Documents.List lst && lst.Margin.Left != 20)
-            {
-                lst.Margin = new Thickness(20, 0, 0, 0);
-                lst.Padding = new Thickness(0);
-            }
+        StickerListEditing.NormalizeTopLevelListIndent(BodyBox.Document);
         SaveContent();
-        UpdateCharCounter();
         _debounce.OnChanged(_sticker);
-        BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+        RefreshBodyTextState();
         SyncFormattingButtons();
     }
 
@@ -346,8 +360,9 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _loading = true;
         try
         {
+            _contentSaveTimer?.Stop();   // pull 내용이 정본 — 대기 중 로컬 직렬화는 폐기 (dirty 가드상 보통 비어 있음)
             _sticker.Title = title;
-            Notify(nameof(StickerTitle));
+            NotifyTitle();
             _sticker.Body = plainBody;
             _sticker.BodyRtf = bodyRtf;
             _sticker.BodyRuns = bodyRuns;
@@ -376,73 +391,18 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     private void BodyBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Tab) { HandleListTab(e); return; }
-        if (e.Key != Key.Space) return;
-        var para = BodyBox.CaretPosition.Paragraph;
-        if (para == null || para.Parent is ListItem) return;
-
-        var text = new TextRange(para.ContentStart, BodyBox.CaretPosition).Text;
-
-        if (text is "-" or "*")
+        if (e.Key == Key.Tab)
         {
-            new TextRange(para.ContentStart, BodyBox.CaretPosition).Text = "";
-            EditingCommands.ToggleBullets.Execute(null, BodyBox);
-            e.Handled = true;
-        }
-        else if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\d+\.$"))
-        {
-            new TextRange(para.ContentStart, BodyBox.CaretPosition).Text = "";
-            EditingCommands.ToggleNumbering.Execute(null, BodyBox);
-            e.Handled = true;
-        }
-    }
-
-    // Tab/Shift+Tab = 리스트 항목 강등/승격 (Notion식 아웃라이너).
-    // WPF 내장 IncreaseIndentation/DecreaseIndentation이 "이전 형제 밑 중첩 / 첫 항목 no-op"을
-    // 정확히 수행한다(TextRangeEditLists.IndentListItems). Tab을 기본 TabForward에 맡기면 빈
-    // 셀렉션일 때 탭문자/빈 불릿이 생기므로 직접 실행 + Handled. (AcceptsTab=True 필요)
-    private void HandleListTab(KeyEventArgs e)
-    {
-        var li = BodyBox.CaretPosition?.Paragraph?.Parent as ListItem;
-        if (li == null) return;   // 리스트 밖 Tab은 기본 동작 유지
-
-        bool numbered = NoteLineDocumentBuilder.IsNumberedStyle(li.List?.MarkerStyle);   // 강등 전 종류 기억
-        if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
-            EditingCommands.DecreaseIndentation.Execute(null, BodyBox);
-        else
-            EditingCommands.IncreaseIndentation.Execute(null, BodyBox);
-
-        // 강등이 만든 새 중첩 List의 종류를 원래대로 강제 (WPF 클론 동작 불확실 대비) —
-        // 종류(불릿/번호)는 보존하고 스타일만 깊이로 사이클한다.
-        if (BodyBox.CaretPosition?.Paragraph?.Parent is ListItem li2 && li2.List is { } newList &&
-            NoteLineDocumentBuilder.IsNumberedStyle(newList.MarkerStyle) != numbered)
-            newList.MarkerStyle = numbered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc;
-
-        FixListMarkersByDepth();
-        RunBodyUpdate();          // 마커 변경은 TextChanged를 안 울리므로 보정 후 명시 저장
-        e.Handled = true;
-    }
-
-    // 문서의 모든 List를 재귀로 내려가며 깊이별 마커(●→○→■ / 1.→a.→i.)·들여쓰기·마커크기 교정.
-    // 종류는 List가 가진 것을 보존, 스타일만 깊이로 사이클. 마커 사이클은 NoteLineDocumentBuilder와 공유.
-    private void FixListMarkersByDepth()
-    {
-        foreach (var block in BodyBox.Document.Blocks)
-            if (block is System.Windows.Documents.List list)
-                FixListMarker(list, 0);
-    }
-
-    private static void FixListMarker(System.Windows.Documents.List list, int depth)
-    {
-        // 마커 종류/크기·들여쓰기·마커 간격은 빌더와 동일한 ApplyListStyle로(공백 균일 + DRY).
-        bool numbered = NoteLineDocumentBuilder.IsNumberedStyle(list.MarkerStyle);
-        NoteLineDocumentBuilder.ApplyListStyle(list, depth, numbered);
-        foreach (var item in list.ListItems)
-            foreach (var inner in item.Blocks)
+            bool outdent = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            if (StickerListEditing.TryIndentListItem(BodyBox, outdent))
             {
-                if (inner is Paragraph p) p.FontSize = 13;   // 텍스트는 본문 크기(마커 폰트와 분리)
-                else if (inner is System.Windows.Documents.List nested) FixListMarker(nested, depth + 1);
+                RunBodyUpdate();      // 마커 변경은 TextChanged를 안 울리므로 보정 후 명시 저장
+                e.Handled = true;
             }
+            return;
+        }
+        if (e.Key == Key.Space && StickerListEditing.TryApplyMarkdownShortcut(BodyBox))
+            e.Handled = true;
     }
 
     private void FontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -518,12 +478,16 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         double newH = Math.Max(MinHeight, Height + e.VerticalChange);
         Width = newW;
         Height = newH;
-        SaveSize();
     }
+
+    // 크기 저장은 리사이즈 종료 시 1회 — DragDelta마다 DB 행 전체를 쓰지 않도록
+    private void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e) => SaveSize();
 
     protected override void OnClosing(CancelEventArgs e)
     {
         FlushPendingBodySave();
+        FlushPendingContentSave(force: true);   // 닫기/종료는 조합 중이어도 확정 — 유실 방지 우선
+        FlushPendingPositionSave();
         if (App.Current.IsShuttingDown || _realClose)
         {
             _debounce.Cancel();
@@ -539,10 +503,31 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         Hide();
     }
 
+    // 이동 중 LocationChanged는 픽셀마다 연속 발화한다 — 디바운스해 마지막 위치만 저장.
+    // 대기 중 저장은 OnClosing에서 flush (숨김/종료 시 위치 유실 방지)
+    private System.Windows.Threading.DispatcherTimer? _positionSaveTimer;
+
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
-        if (!_loading) SavePosition();
+        if (_loading) return;
+        if (_positionSaveTimer is null)
+        {
+            _positionSaveTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(400)
+            };
+            _positionSaveTimer.Tick += (_, _) => { _positionSaveTimer.Stop(); SavePosition(); };
+        }
+        _positionSaveTimer.Stop();
+        _positionSaveTimer.Start();
+    }
+
+    private void FlushPendingPositionSave()
+    {
+        if (_positionSaveTimer is not { IsEnabled: true }) return;
+        _positionSaveTimer.Stop();
+        SavePosition();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -559,7 +544,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             if (lines is not null)
             {
                 NoteLineDocumentBuilder.Populate(BodyBox.Document, lines);
-                builtFromRuns = !RebuildLooksDegraded(lines);
+                builtFromRuns = !StickerBodyCodec.RebuildLooksDegraded(BodyBox.Document, lines);
                 if (!builtFromRuns)
                     SyncLog.Write("load: bodyRuns 재구성 손실 의심 — RTF/plain 폴백 " +
                                   $"(sticker={_sticker.Id[..Math.Min(8, _sticker.Id.Length)]})");
@@ -569,9 +554,9 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             {
                 // 폴백/구버전 행: RTF는 색·폰트·마진이 run에 박혀 들어오므로 정규화로
                 // 테마 색·스티커 폰트를 상속받게 한다 (BodyRuns 경로는 빌더 출력이 이미 깨끗).
-                LoadFromRtfOrPlain();
-                NormalizeDocumentMargins();
-                NormalizeInheritedFormatting();
+                StickerBodyCodec.LoadFromRtfOrPlain(BodyBox.Document, _sticker.BodyRtf, _sticker.Body);
+                StickerBodyCodec.NormalizeDocumentMargins(BodyBox.Document);
+                StickerBodyCodec.NormalizeInheritedFormatting(BodyBox.Document);
             }
             // BodyRuns 경로는 정규화하지 않는다 — 정규화가 마커 크기용 FontSize까지 지운다.
 
@@ -585,153 +570,63 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         {
             _loading = false;
         }
-        BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    // BodyRuns로 만든 문서의 실제 텍스트가 기대치(run 텍스트 글자수 합)의 절반 미만이면 손상 의심.
-    // 마커는 양쪽 다 텍스트에 없어 공정한 비교. 공백/개행 제외. (corpus 게이트의 런타임 백업)
-    private bool RebuildLooksDegraded(IReadOnlyList<NoteLine> lines)
-    {
-        int expected = lines.Sum(l => l.Runs.Sum(r => r.Text.Count(c => !char.IsWhiteSpace(c))));
-        if (expected == 0) return false;
-        var actualText = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
-        int actual = actualText.Count(c => !char.IsWhiteSpace(c));
-        return actual < expected / 2;
-    }
-
-    // BodyRuns 폴백/구버전 호환: RTF(있으면) → 실패 시 plain Body → 둘 다 없으면 빈 문서.
-    private void LoadFromRtfOrPlain()
-    {
-        if (!string.IsNullOrEmpty(_sticker.BodyRtf))
-        {
-            try
-            {
-                using var ms = new System.IO.MemoryStream(Encoding.Latin1.GetBytes(_sticker.BodyRtf));
-                new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd)
-                    .Load(ms, DataFormats.Rtf);
-                return;
-            }
-            catch { }
-        }
-        BodyBox.Document.Blocks.Clear();
-        if (!string.IsNullOrEmpty(_sticker.Body))
-            BodyBox.Document.Blocks.Add(new Paragraph(new Run(_sticker.Body)));
-    }
-
-    private void NormalizeDocumentMargins()
-    {
-        foreach (var block in BodyBox.Document.Blocks)
-        {
-            block.ClearValue(Block.MarginProperty);
-            if (block is System.Windows.Documents.List list)
-            {
-                list.Margin = new Thickness(20, 0, 0, 0);
-                list.Padding = new Thickness(0);
-                foreach (var item in list.ListItems)
-                {
-                    item.ClearValue(ListItem.MarginProperty);
-                    foreach (var inner in item.Blocks)
-                        inner.ClearValue(Block.MarginProperty);
-                }
-            }
-        }
-    }
-
-    // 색/글꼴/크기의 명시값 제거 — Bold(FontWeight)/Underline(TextDecorations)은 보존
-    private void NormalizeInheritedFormatting()
-    {
-        foreach (var block in BodyBox.Document.Blocks)
-            NormalizeElement(block);
-    }
-
-    private static void NormalizeElement(TextElement el)
-    {
-        el.ClearValue(TextElement.ForegroundProperty);
-        el.ClearValue(TextElement.FontFamilyProperty);
-        el.ClearValue(TextElement.FontSizeProperty);
-
-        switch (el)
-        {
-            case Paragraph p:
-                foreach (var inline in p.Inlines) NormalizeElement(inline);
-                break;
-            case Span s:
-                foreach (var inline in s.Inlines) NormalizeElement(inline);
-                break;
-            case System.Windows.Documents.List list:
-                foreach (var item in list.ListItems)
-                    foreach (var inner in item.Blocks)
-                        NormalizeElement(inner);
-                break;
-        }
+        RefreshBodyTextState();
     }
 
     private void SaveBodyContent()
     {
-        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
-
-        using var rtfMs = new System.IO.MemoryStream();
-        range.Save(rtfMs, DataFormats.Rtf);
-        _sticker.BodyRtf = Encoding.Latin1.GetString(rtfMs.ToArray());
-
-        var lines = new List<string>();
-        EmitPlainBlocks(BodyBox.Document.Blocks, lines);
-        _sticker.Body = string.Join("\n", lines).TrimEnd('\n');
-        // 같은 문서에서 run 단위 서식 + depth도 추출 — push가 굵게/밑줄·중첩을 보내도록
-        _sticker.BodyRuns = NoteLineSerializer.Serialize(NoteLineExtractor.Extract(BodyBox.Document));
+        var body = StickerBodyCodec.Serialize(BodyBox.Document);
+        _sticker.BodyRtf = body.Rtf;
+        _sticker.Body = body.Plain;
+        _sticker.BodyRuns = body.Runs;
     }
 
-    // plain Body 추출 — 중첩 포함, 깊이는 평탄(설계상 plain은 평면, 깊이는 BodyRuns가 정본).
-    private static void EmitPlainBlocks(BlockCollection blocks, List<string> lines)
+    // 문서 텍스트를 한 번 읽어 placeholder·글자수 카운터를 함께 갱신.
+    // IME 조합 중엔 호출되지 않는다 (RunBodyUpdate/LoadBody 경로만 사용)
+    private void RefreshBodyTextState()
     {
-        foreach (var block in blocks)
-        {
-            if (block is Paragraph para)
-                lines.Add(new TextRange(para.ContentStart, para.ContentEnd).Text);
-            else if (block is System.Windows.Documents.List list)
-                EmitPlainList(list, lines);
-        }
+        var text = StickerBodyCodec.DocumentText(BodyBox.Document);
+        _bodyTextLength = text.Length;
+        BodyPlaceholder.Visibility = string.IsNullOrWhiteSpace(text) ? Visibility.Visible : Visibility.Collapsed;
+        UpdateCharCounter();
     }
 
-    // 각 항목은 "• "/"N. " 접두. 마커가 텍스트에 샌 경우(RTF 왕복) 제거. 중첩 List는 재귀(평탄).
-    private static void EmitPlainList(System.Windows.Documents.List list, List<string> lines)
-    {
-        bool numbered = NoteLineDocumentBuilder.IsNumberedStyle(list.MarkerStyle);
-        int n = 1;
-        foreach (var item in list.ListItems)
-            foreach (var inner in item.Blocks)
-            {
-                if (inner is Paragraph innerPara)
-                {
-                    var text = new TextRange(innerPara.ContentStart, innerPara.ContentEnd).Text;
-                    if (!numbered && text.Length > 0 && text[0] == '•')
-                        text = text[1..].TrimStart('\t', ' ');
-                    else if (numbered)
-                    {
-                        var m2 = System.Text.RegularExpressions.Regex.Match(text, @"^\d+[.)]\s");
-                        if (m2.Success) text = text[m2.Length..];
-                    }
-                    lines.Add(numbered ? $"{n++}. {text}" : $"• {text}");
-                }
-                else if (inner is System.Windows.Documents.List nested)
-                    EmitPlainList(nested, lines);
-            }
-    }
-
-    private bool IsBodyEmpty()
-    {
-        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
-        return string.IsNullOrWhiteSpace(range.Text);
-    }
+    // 편집 저장 — 상태(pending/UpdatedAt)와 점 색은 즉시, 비용이 큰 본문 직렬화(RTF·runs)와
+    // DB 쓰기는 300ms 디바운스로 묶는다. 연속 타이핑 중 키마다 전체 문서를 직렬화하지 않기 위함.
+    // 확정 시점: 타이머 만료, 본문 포커스 이탈, 창 닫기/숨김/종료, sync enqueue 직전(위 콜백).
+    private System.Windows.Threading.DispatcherTimer? _contentSaveTimer;
 
     private void SaveContent()
     {
-        SaveBodyContent();
         _sticker.UpdatedAt = DateTime.UtcNow.ToString("O");
         _sticker.SyncState = "pending";
+        UpdateSyncIndicator();
+
+        if (_contentSaveTimer is null)
+        {
+            _contentSaveTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _contentSaveTimer.Tick += (_, _) => FlushPendingContentSave();
+        }
+        _contentSaveTimer.Stop();
+        _contentSaveTimer.Start();
+    }
+
+    private void FlushPendingContentSave() => FlushPendingContentSave(force: false);
+
+    private void FlushPendingContentSave(bool force)
+    {
+        if (_contentSaveTimer is not { IsEnabled: true }) return;
+        _contentSaveTimer.Stop();
+        // IME 조합 중 직렬화는 조합을 깨뜨린다 (한글 복합 음절 손상) — 타이머를 재무장해 조합이
+        // 끝난 뒤 저장. 직전 commit까지의 내용은 이미 문서에 있으므로 다음 tick에 함께 반영된다
+        if (_imeComposing && !force) { _contentSaveTimer.Start(); return; }
+        SaveBodyContent();
         try { _repo.Update(_sticker); }
         catch { /* logged inside repo */ }
-        UpdateSyncIndicator();
+        UpdateSyncIndicator();   // 빈 메모 판정(IsEmptyUnsynced)은 Body 확정 후 값 기준
     }
 
     private void SavePosition()
@@ -800,6 +695,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             Notify(nameof(BodyBackground));
             Notify(nameof(BodyForeground));
         }
+        else if (e.PropertyName == nameof(AppSettings.ShowInTaskbar))
+            ShowInTaskbar = AppSettings.Instance.ShowInTaskbar;
     }
 
     public void RefreshCategoryOptions()

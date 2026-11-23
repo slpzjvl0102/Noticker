@@ -27,6 +27,15 @@ public class AppSettings : INotifyPropertyChanged
         set { _isSyncPaused = value; Notify(nameof(IsSyncPaused)); }
     }
 
+    // 스티커·포모도로 위젯을 작업표시줄에 표시 (기본 true). 대화상자 창(노트 목록·설정 등)은
+    // 이 값과 무관하게 항상 작업표시줄에 나온다. 런타임 변경 시 열린 창이 즉시 반영하도록 Notify
+    private bool _showInTaskbar = true;
+    public bool ShowInTaskbar
+    {
+        get => _showInTaskbar;
+        set { _showInTaskbar = value; Notify(nameof(ShowInTaskbar)); }
+    }
+
     public string? NotionToken { get; set; }
     public string? TargetDbId { get; set; }
     public string? NotionBotUserId { get; set; }   // null = 덮어쓰기 보호/pull 미활성 (캐시 전)
