@@ -8,7 +8,7 @@ namespace Noticker.Windows;
 // NoteLine(+Depth) → FlowDocument 재구성 — 중첩 리스트의 '정본' 빌더.
 // RTF는 중첩 List 구조·MarkerStyle을 신뢰성 있게 왕복하지 못하므로(MS 재현·미해결 버그),
 // 로드(StickerWindow.LoadBody)와 pull 합성(RtfComposer) 모두 이 빌더를 거쳐 문서를 만든다.
-// UI 스레드 전용(FlowDocument는 STA). 마커 사이클은 StickerWindow.FixListMarker와 공유.
+// UI 스레드 전용(FlowDocument는 STA). 마커 사이클은 StickerListEditing.FixListMarkersByDepth와 공유.
 public static class NoteLineDocumentBuilder
 {
     private const double BodyFontSize = 13;   // 항목 텍스트 크기 (마커와 분리)
