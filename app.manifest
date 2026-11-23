@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="Noticker.app"/>
+
+  <!-- 고해상도(노트북 125~200% 배율·모니터별 다른 배율)에서 비트맵 확대로 흐려지지 않도록
+       모니터별 DPI 인식(PerMonitorV2). 지원하지 않는 구버전 Windows는 dpiAware(true/pm)로 폴백.
+       좌표 단위 주의: WinForms Screen은 물리 픽셀, WPF Left/Top은 DIP — ScreenDip로 변환할 것 -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+    </windowsSettings>
+  </application>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 / 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+</assembly>

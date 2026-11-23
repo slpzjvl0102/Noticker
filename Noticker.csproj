@@ -10,6 +10,7 @@
     <AssemblyName>Noticker</AssemblyName>
     <RootNamespace>Noticker</RootNamespace>
     <ApplicationIcon>Assets\noticker.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

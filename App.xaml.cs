@@ -169,14 +169,12 @@ public partial class App : System.Windows.Application
             (Action)win.FocusBody);
     }
 
-    private static IReadOnlyList<(string DeviceName, System.Drawing.Rectangle Area)> CurrentScreens() =>
-        Screen.AllScreens.Select(sc => (sc.DeviceName, sc.WorkingArea)).ToList();
-
     private void RestoreStickers()
     {
         var stickers = StickerRepo!.GetAll();
-        var screens = CurrentScreens();
-        var primary = Screen.PrimaryScreen!.WorkingArea;
+        // 작업 영역은 DIP — 창 Left/Top과 같은 단위 (배율 125%+ 노트북 대응)
+        var screens = ScreenDip.AllWorkingAreas();
+        var primary = ScreenDip.PrimaryWorkingArea();
 
         foreach (var s in stickers)
         {
@@ -191,15 +189,16 @@ public partial class App : System.Windows.Application
     private static (Screen Screen, int X, int Y) CenterOnActiveScreen()
     {
         var screen = GetActiveScreen();
-        var wa = screen.WorkingArea;
+        var wa = ScreenDip.WorkingArea(screen);
         return (screen, wa.Left + (wa.Width - 250) / 2, wa.Top + (wa.Height - 300) / 2);
     }
 
     private static void PlaceOn(Sticker s, Screen screen, int x, int y)
     {
+        var wa = ScreenDip.WorkingArea(screen);
         s.MonitorDeviceName = screen.DeviceName;
-        s.PositionX = x - screen.WorkingArea.Left;
-        s.PositionY = y - screen.WorkingArea.Top;
+        s.PositionX = x - wa.Left;
+        s.PositionY = y - wa.Top;
     }
 
     public StickerWindow CreateSticker()
@@ -302,7 +301,7 @@ public partial class App : System.Windows.Application
 
         var win = new SettingsWindow(SettingsRepo!, _notionClient!, StickerRepo!);
         // 모니터 우측 배치 — 온보딩 직후 중앙에 생기는 새 스티커와 겹치지 않도록
-        var wa = GetActiveScreen().WorkingArea;
+        var wa = ScreenDip.WorkingArea(GetActiveScreen());
         win.Left = Math.Max(wa.Left, wa.Right - win.Width - 16);
         win.Top = wa.Top + Math.Max(0, (wa.Height - win.Height) / 2);
         win.Show();
