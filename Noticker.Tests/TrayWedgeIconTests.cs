@@ -29,6 +29,17 @@ public class TrayWedgeIconTests
         Assert.Equal(16, icon.Width);
     }
 
+    [Theory]
+    [InlineData(20)]
+    [InlineData(24)]
+    [InlineData(32)]
+    public void Render_HighDpiSize_ReturnsRequestedSize(int size)
+    {
+        using var icon = TrayWedgeIcon.Render(0.5, Red, size);
+        Assert.Equal(size, icon.Width);
+        Assert.Equal(size, icon.Height);
+    }
+
     [Fact]
     public void Render_RepeatedCalls_DoNotLeakHandles()
     {

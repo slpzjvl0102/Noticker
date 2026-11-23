@@ -27,7 +27,8 @@ public partial class App
         var uri = new Uri("pack://application:,,,/Assets/noticker.ico");
         var stream = System.Windows.Application.GetResourceStream(uri)?.Stream;
         return stream is not null
-            ? new System.Drawing.Icon(stream)
+            // 트레이 크기(배율 150%면 24px)에 맞는 프레임을 고른다 — 기본 32px 축소는 흐림
+            ? new System.Drawing.Icon(stream, SystemInformation.SmallIconSize)
             : SystemIcons.Application;
     }
 
@@ -85,7 +86,8 @@ public partial class App
                 var color = _pomodoroWedgeColorKey is null
                     ? System.Drawing.Color.FromArgb(0x9A, 0xA0, 0xA6)
                     : ToDrawingColor(NotionColorPalette.Wedge(_pomodoroWedgeColorKey));
-                _wedgeTrayIcon = TrayWedgeIcon.Render(_pomodoro.WedgeFraction, color);
+                _wedgeTrayIcon = TrayWedgeIcon.Render(_pomodoro.WedgeFraction, color,
+                    SystemInformation.SmallIconSize.Width);
                 _trayIcon.Icon = _wedgeTrayIcon;
             }
         }

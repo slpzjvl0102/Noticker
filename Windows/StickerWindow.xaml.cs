@@ -635,9 +635,10 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             new System.Windows.Interop.WindowInteropHelper(this).Handle)
             ?? System.Windows.Forms.Screen.PrimaryScreen!;
 
+        var wa = ScreenDip.WorkingArea(screen);   // Left/Top과 같은 DIP 단위로 상대 좌표 저장
         _sticker.MonitorDeviceName = screen.DeviceName;
-        _sticker.PositionX = (int)(Left - screen.WorkingArea.Left);
-        _sticker.PositionY = (int)(Top - screen.WorkingArea.Top);
+        _sticker.PositionX = (int)(Left - wa.Left);
+        _sticker.PositionY = (int)(Top - wa.Top);
         try { _repo.Update(_sticker); }
         catch { /* logged inside repo */ }
     }

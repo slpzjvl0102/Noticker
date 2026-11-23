@@ -321,12 +321,11 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
 
     private void RestorePosition()
     {
-        var primary = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
+        var primary = ScreenDip.PrimaryWorkingArea();   // DIP — Left/Top과 같은 단위
         if (int.TryParse(_settingsRepo.Get("pomodoro_window_x"), out var rx) &&
             int.TryParse(_settingsRepo.Get("pomodoro_window_y"), out var ry))
         {
-            var screens = System.Windows.Forms.Screen.AllScreens
-                .Select(sc => (sc.DeviceName, sc.WorkingArea)).ToList();
+            var screens = ScreenDip.AllWorkingAreas();
             var wa = ScreenPlacement.SelectWorkingArea(
                 screens, primary, _settingsRepo.Get("pomodoro_monitor"));
             var (x, y) = ScreenPlacement.ClampToArea(wa, rx, ry, (int)Width, (int)Height);
@@ -348,9 +347,10 @@ public partial class PomodoroWindow : Window, INotifyPropertyChanged
             ?? System.Windows.Forms.Screen.PrimaryScreen!;
         try
         {
+            var wa = ScreenDip.WorkingArea(screen);
             _settingsRepo.Set("pomodoro_monitor", screen.DeviceName);
-            _settingsRepo.Set("pomodoro_window_x", ((int)(Left - screen.WorkingArea.Left)).ToString());
-            _settingsRepo.Set("pomodoro_window_y", ((int)(Top - screen.WorkingArea.Top)).ToString());
+            _settingsRepo.Set("pomodoro_window_x", ((int)(Left - wa.Left)).ToString());
+            _settingsRepo.Set("pomodoro_window_y", ((int)(Top - wa.Top)).ToString());
         }
         catch { }
     }

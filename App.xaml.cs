@@ -30,6 +30,21 @@ public partial class App : System.Windows.Application
 
     public static new App Current => (App)System.Windows.Application.Current;
 
+    // 고배율(125%·150%)에서 글자·테두리 번짐 완화 — 모든 창(파생 포함)의 기본값을 바꾼다.
+    // - UseLayoutRounding: 소수 배율에서 요소 경계가 반 픽셀에 걸려 1px 선·글자가 뭉개지는 것 방지
+    // - TextFormattingMode.Display: 픽셀 격자에 맞춘 글리프 (Ideal은 작은 글자가 흐릿함).
+    //   스티커/포모도로는 AllowsTransparency(레이어드 창)라 ClearType이 꺼지므로 효과가 특히 크다
+    // 창이 하나도 만들어지기 전에 1회 호출해야 한다 (OverrideMetadata는 타입당 1회)
+    private static void ConfigureCrispRendering()
+    {
+        FrameworkElement.UseLayoutRoundingProperty.OverrideMetadata(typeof(Window),
+            new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.Inherits));
+        System.Windows.Media.TextOptions.TextFormattingModeProperty.OverrideMetadata(typeof(Window),
+            new FrameworkPropertyMetadata(System.Windows.Media.TextFormattingMode.Display,
+                FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender |
+                FrameworkPropertyMetadataOptions.Inherits));
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // Single instance guard
@@ -41,6 +56,7 @@ public partial class App : System.Windows.Application
         }
 
         base.OnStartup(e);
+        ConfigureCrispRendering();
 
         if (!InitDatabase()) return;
 
@@ -169,14 +185,12 @@ public partial class App : System.Windows.Application
             (Action)win.FocusBody);
     }
 
-    private static IReadOnlyList<(string DeviceName, System.Drawing.Rectangle Area)> CurrentScreens() =>
-        Screen.AllScreens.Select(sc => (sc.DeviceName, sc.WorkingArea)).ToList();
-
     private void RestoreStickers()
     {
         var stickers = StickerRepo!.GetAll();
-        var screens = CurrentScreens();
-        var primary = Screen.PrimaryScreen!.WorkingArea;
+        // 작업 영역은 DIP — 창 Left/Top과 같은 단위 (배율 125%+ 노트북 대응)
+        var screens = ScreenDip.AllWorkingAreas();
+        var primary = ScreenDip.PrimaryWorkingArea();
 
         foreach (var s in stickers)
         {
@@ -191,15 +205,16 @@ public partial class App : System.Windows.Application
     private static (Screen Screen, int X, int Y) CenterOnActiveScreen()
     {
         var screen = GetActiveScreen();
-        var wa = screen.WorkingArea;
+        var wa = ScreenDip.WorkingArea(screen);
         return (screen, wa.Left + (wa.Width - 250) / 2, wa.Top + (wa.Height - 300) / 2);
     }
 
     private static void PlaceOn(Sticker s, Screen screen, int x, int y)
     {
+        var wa = ScreenDip.WorkingArea(screen);
         s.MonitorDeviceName = screen.DeviceName;
-        s.PositionX = x - screen.WorkingArea.Left;
-        s.PositionY = y - screen.WorkingArea.Top;
+        s.PositionX = x - wa.Left;
+        s.PositionY = y - wa.Top;
     }
 
     public StickerWindow CreateSticker()
@@ -302,7 +317,7 @@ public partial class App : System.Windows.Application
 
         var win = new SettingsWindow(SettingsRepo!, _notionClient!, StickerRepo!);
         // 모니터 우측 배치 — 온보딩 직후 중앙에 생기는 새 스티커와 겹치지 않도록
-        var wa = GetActiveScreen().WorkingArea;
+        var wa = ScreenDip.WorkingArea(GetActiveScreen());
         win.Left = Math.Max(wa.Left, wa.Right - win.Width - 16);
         win.Top = wa.Top + Math.Max(0, (wa.Height - win.Height) / 2);
         win.Show();
