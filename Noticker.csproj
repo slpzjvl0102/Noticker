@@ -11,6 +11,9 @@
     <RootNamespace>Noticker</RootNamespace>
     <ApplicationIcon>Assets\noticker.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFAC010은 WinForms 진입점(ApplicationConfiguration.Initialize)용 권고다. 이 앱은 WPF가
+         진입점이라 ApplicationHighDpiMode 속성이 적용되지 않으므로, DPI 인식은 manifest가 정답 -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
