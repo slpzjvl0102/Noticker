@@ -5,6 +5,7 @@
         WindowStyle="None"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
+        Title="Noticker — 포모도로"
         ShowActivated="False"
         AllowsTransparency="True"
         Background="Transparent"

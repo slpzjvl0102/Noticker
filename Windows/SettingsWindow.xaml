@@ -5,7 +5,7 @@
         Width="420" Height="520"
         WindowStartupLocation="Manual"
         ResizeMode="NoResize"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
         Background="{StaticResource SurfaceBrush}">
 
     <Window.Resources>
@@ -96,6 +96,7 @@
 
                 <CheckBox x:Name="ColorSwapCheck" Content="색상 Swap (흑↔백)"/>
                 <CheckBox x:Name="AutostartCheck" Content="Windows 시작 시 자동 실행"/>
+                <CheckBox x:Name="TaskbarCheck" Content="스티커를 작업표시줄에 표시"/>
 
                 <TextBlock Text="새 스티커 단축키 (전역)" Style="{StaticResource FieldLabelStyle}"
                            Margin="0,8,0,4"/>

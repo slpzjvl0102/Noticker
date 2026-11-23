@@ -32,6 +32,7 @@ public partial class SettingsWindow : Window
             : "연결 안 됨";
         ColorSwapCheck.IsChecked = app.ColorSwapped;
         AutostartCheck.IsChecked = app.AutostartEnabled;
+        TaskbarCheck.IsChecked = app.ShowInTaskbar;
         SelectHotkeyItem(app.HotkeyPreset);
 
         PomFocusBox.Text = app.PomodoroFocusMinutes.ToString();
@@ -128,6 +129,7 @@ public partial class SettingsWindow : Window
 
         app.ColorSwapped = ColorSwapCheck.IsChecked == true;
         app.AutostartEnabled = AutostartCheck.IsChecked == true;
+        app.ShowInTaskbar = TaskbarCheck.IsChecked == true;   // Notify → 열린 스티커/포모도로 즉시 반영
 
         // 입력 클램프 — LoadInto와 같은 ParseClamped 사용 (규칙 한 곳 정의)
         app.PomodoroFocusMinutes = AppSettings.ParseClamped(PomFocusBox.Text,
@@ -148,6 +150,7 @@ public partial class SettingsWindow : Window
 
         _settings.Set("color_swapped", app.ColorSwapped ? "true" : "false");
         _settings.Set("autostart_enabled", app.AutostartEnabled ? "true" : "false");
+        _settings.Set("show_in_taskbar", app.ShowInTaskbar ? "true" : "false");
         _settings.Set("hotkey_preset", app.HotkeyPreset);
 
         _settings.Set("pomodoro_focus_min", app.PomodoroFocusMinutes.ToString());

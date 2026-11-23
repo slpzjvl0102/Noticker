@@ -4,7 +4,7 @@
         Title="Notion에서 가져오기" Width="320" Height="460"
         MinWidth="240" MinHeight="280"
         WindowStyle="SingleBorderWindow"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
         ResizeMode="CanResize">
     <DockPanel x:Name="RootPanel">
         <!-- 안내 -->

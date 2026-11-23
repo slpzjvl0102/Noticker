@@ -4,6 +4,7 @@
         WindowStyle="None"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
+        Title="{Binding WindowTitle}"
         AllowsTransparency="True"
         Background="Transparent"
         MinWidth="166" MinHeight="172"

@@ -72,6 +72,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         BodyBox.Document.Resources[typeof(System.Windows.Documents.List)] = listStyle;
 
         AppSettings.Instance.PropertyChanged += OnAppSettingsChanged;
+        ShowInTaskbar = AppSettings.Instance.ShowInTaskbar;
 
         RefreshCategoryOptions();
         CategoryBox.SelectedValue = _sticker.Category;
@@ -107,7 +108,17 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     public string StickerTitle
     {
         get => _sticker.Title;
-        set { _sticker.Title = value; Notify(nameof(StickerTitle)); }
+        set { _sticker.Title = value; NotifyTitle(); }
+    }
+
+    // 작업표시줄/Alt+Tab 라벨 — 제목 없는 스티커는 앱 이름
+    public string WindowTitle =>
+        string.IsNullOrWhiteSpace(_sticker.Title) ? "Noticker" : _sticker.Title;
+
+    private void NotifyTitle()
+    {
+        Notify(nameof(StickerTitle));
+        Notify(nameof(WindowTitle));
     }
 
     public string? Category
@@ -246,7 +257,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         if (_loading) return;
         _sticker.Title = TitleBox.Text;
-        Notify(nameof(StickerTitle));
+        NotifyTitle();
         SaveContent();
         _debounce.OnChanged(_sticker);
     }
@@ -347,7 +358,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         try
         {
             _sticker.Title = title;
-            Notify(nameof(StickerTitle));
+            NotifyTitle();
             _sticker.Body = plainBody;
             _sticker.BodyRtf = bodyRtf;
             _sticker.BodyRuns = bodyRuns;
@@ -800,6 +811,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             Notify(nameof(BodyBackground));
             Notify(nameof(BodyForeground));
         }
+        else if (e.PropertyName == nameof(AppSettings.ShowInTaskbar))
+            ShowInTaskbar = AppSettings.Instance.ShowInTaskbar;
     }
 
     public void RefreshCategoryOptions()

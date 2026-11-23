@@ -114,6 +114,22 @@ public class SettingsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void LoadInto_MissingShowInTaskbar_DefaultsTrue()
+    {
+        AppSettings.Instance.ShowInTaskbar = false;   // 잡값
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.True(AppSettings.Instance.ShowInTaskbar);
+    }
+
+    [Fact]
+    public void LoadInto_ShowInTaskbarFalse_Loaded()
+    {
+        _repo.Set("show_in_taskbar", "false");
+        _repo.LoadInto(AppSettings.Instance);
+        Assert.False(AppSettings.Instance.ShowInTaskbar);
+    }
+
+    [Fact]
     public void LoadInto_MissingHotkeyPreset_DefaultsCtrlAltN()
     {
         AppSettings.Instance.HotkeyPreset = "stale";   // 잡값
