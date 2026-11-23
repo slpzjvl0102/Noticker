@@ -196,14 +196,28 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _sticker.NotionPageId is null &&
         string.IsNullOrEmpty(_sticker.Title) && string.IsNullOrEmpty(_sticker.Body);
 
+    // 상태색은 고정값 — 갱신마다 새 브러시를 만들지 않도록 Freeze된 공유 인스턴스 사용
+    private static SolidColorBrush Frozen(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
+    private static readonly SolidColorBrush _dotEmpty    = Frozen(0x9C, 0xA3, 0xAF);
+    private static readonly SolidColorBrush _dotSynced   = Frozen(0x22, 0xC5, 0x5E);
+    private static readonly SolidColorBrush _dotFailed   = Frozen(0xEF, 0x44, 0x44);
+    private static readonly SolidColorBrush _dotConflict = Frozen(0xFF, 0x8C, 0x00);
+    private static readonly SolidColorBrush _dotPending  = Frozen(0xF5, 0x9E, 0x0B);
+
     public Brush SyncDotColor => IsEmptyUnsynced
-        ? new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))
+        ? _dotEmpty
         : _sticker.SyncState switch
         {
-            "synced"   => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
-            "failed"   => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
-            "conflict" => new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00)),
-            _          => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
+            "synced"   => _dotSynced,
+            "failed"   => _dotFailed,
+            "conflict" => _dotConflict,
+            _          => _dotPending,
         };
 
     public string SyncTooltip => IsEmptyUnsynced
@@ -219,25 +233,14 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
 
     // ── Char counter ───────────────────────────────────────────────────────────
 
-    public string CharCounterText
-    {
-        get
-        {
-            if (BodyBox == null) return "0자";
-            var t = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
-            return $"{t.Length:N0}자";
-        }
-    }
+    // 본문 글자수 캐시 — RefreshBodyTextState가 문서 텍스트를 한 번만 읽어 갱신한다.
+    // (이전엔 키 입력마다 카운터 텍스트·표시 여부·placeholder가 각각 전체 문서를 다시 읽었음)
+    private int _bodyTextLength;
 
-    public Visibility CharCounterVisibility
-    {
-        get
-        {
-            if (BodyBox == null) return Visibility.Collapsed;
-            var t = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
-            return t.Length >= 1800 ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
+    public string CharCounterText => $"{_bodyTextLength:N0}자";
+
+    public Visibility CharCounterVisibility =>
+        _bodyTextLength >= 1800 ? Visibility.Visible : Visibility.Collapsed;
 
     // ── Event handlers ─────────────────────────────────────────────────────────
 
@@ -245,6 +248,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         if (e.OriginalSource is System.Windows.Controls.Button) return;
         DragMove();
+        _positionSaveTimer?.Stop();   // 드래그 종료 시점 위치를 즉시 확정 — 대기 중 저장은 불필요
         SavePosition();
     }
 
@@ -287,9 +291,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
                 lst.Padding = new Thickness(0);
             }
         SaveContent();
-        UpdateCharCounter();
         _debounce.OnChanged(_sticker);
-        BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+        RefreshBodyTextState();
         SyncFormattingButtons();
     }
 
@@ -529,12 +532,15 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         double newH = Math.Max(MinHeight, Height + e.VerticalChange);
         Width = newW;
         Height = newH;
-        SaveSize();
     }
+
+    // 크기 저장은 리사이즈 종료 시 1회 — DragDelta마다 DB 행 전체를 쓰지 않도록
+    private void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e) => SaveSize();
 
     protected override void OnClosing(CancelEventArgs e)
     {
         FlushPendingBodySave();
+        FlushPendingPositionSave();
         if (App.Current.IsShuttingDown || _realClose)
         {
             _debounce.Cancel();
@@ -550,10 +556,31 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         Hide();
     }
 
+    // 이동 중 LocationChanged는 픽셀마다 연속 발화한다 — 디바운스해 마지막 위치만 저장.
+    // 대기 중 저장은 OnClosing에서 flush (숨김/종료 시 위치 유실 방지)
+    private System.Windows.Threading.DispatcherTimer? _positionSaveTimer;
+
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
-        if (!_loading) SavePosition();
+        if (_loading) return;
+        if (_positionSaveTimer is null)
+        {
+            _positionSaveTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(400)
+            };
+            _positionSaveTimer.Tick += (_, _) => { _positionSaveTimer.Stop(); SavePosition(); };
+        }
+        _positionSaveTimer.Stop();
+        _positionSaveTimer.Start();
+    }
+
+    private void FlushPendingPositionSave()
+    {
+        if (_positionSaveTimer is not { IsEnabled: true }) return;
+        _positionSaveTimer.Stop();
+        SavePosition();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -596,7 +623,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         {
             _loading = false;
         }
-        BodyPlaceholder.Visibility = IsBodyEmpty() ? Visibility.Visible : Visibility.Collapsed;
+        RefreshBodyTextState();
     }
 
     // BodyRuns로 만든 문서의 실제 텍스트가 기대치(run 텍스트 글자수 합)의 절반 미만이면 손상 의심.
@@ -729,10 +756,14 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             }
     }
 
-    private bool IsBodyEmpty()
+    // 문서 텍스트를 한 번 읽어 placeholder·글자수 카운터를 함께 갱신.
+    // IME 조합 중엔 호출되지 않는다 (RunBodyUpdate/LoadBody 경로만 사용)
+    private void RefreshBodyTextState()
     {
-        var range = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd);
-        return string.IsNullOrWhiteSpace(range.Text);
+        var text = new TextRange(BodyBox.Document.ContentStart, BodyBox.Document.ContentEnd).Text;
+        _bodyTextLength = text.Length;
+        BodyPlaceholder.Visibility = string.IsNullOrWhiteSpace(text) ? Visibility.Visible : Visibility.Collapsed;
+        UpdateCharCounter();
     }
 
     private void SaveContent()

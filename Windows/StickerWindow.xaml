@@ -438,6 +438,7 @@
                 <Thumb Grid.Column="2" Width="16" Height="20"
                        Cursor="SizeNWSE" VerticalAlignment="Bottom"
                        DragDelta="ResizeThumb_DragDelta"
+                       DragCompleted="ResizeThumb_DragCompleted"
                        Background="Transparent"
                        Template="{StaticResource ResizeHandleTemplate}"/>
             </Grid>

@@ -192,7 +192,7 @@ public partial class App : System.Windows.Application
         {
             // 시작 시 실패(타 앱 점유) — 풍선 1회, 앱은 정상 동작 (스펙 §5)
             var name = HotkeyPresets.DisplayName(AppSettings.Instance.HotkeyPreset);
-            _trayIcon?.ShowBalloonTip(6000, "Noticker",
+            ShowBalloon(6000, "Noticker",
                 $"단축키 등록 실패 — {name}을(를) 다른 앱이 사용 중입니다. 설정에서 변경하세요.",
                 ToolTipIcon.Warning);
         }
@@ -237,19 +237,27 @@ public partial class App : System.Windows.Application
         }
     }
 
-    public StickerWindow CreateSticker()
+    // 새 스티커 기본 배치 — 커서가 있는 모니터 작업 영역 중앙 (250x300 기본 크기 기준).
+    // 반환: 대상 모니터와 화면 절대 좌표(x, y). 모니터 상대 좌표는 PlaceOn이 채운다
+    private static (Screen Screen, int X, int Y) CenterOnActiveScreen()
     {
         var screen = GetActiveScreen();
         var wa = screen.WorkingArea;
-        int x = wa.Left + (wa.Width - 250) / 2;
-        int y = wa.Top + (wa.Height - 300) / 2;
+        return (screen, wa.Left + (wa.Width - 250) / 2, wa.Top + (wa.Height - 300) / 2);
+    }
 
-        var s = new Sticker
-        {
-            MonitorDeviceName = screen.DeviceName,
-            PositionX = x - wa.Left,
-            PositionY = y - wa.Top,
-        };
+    private static void PlaceOn(Sticker s, Screen screen, int x, int y)
+    {
+        s.MonitorDeviceName = screen.DeviceName;
+        s.PositionX = x - screen.WorkingArea.Left;
+        s.PositionY = y - screen.WorkingArea.Top;
+    }
+
+    public StickerWindow CreateSticker()
+    {
+        var (screen, x, y) = CenterOnActiveScreen();
+        var s = new Sticker();
+        PlaceOn(s, screen, x, y);
         StickerRepo!.Insert(s);
         OpenStickerWindow(s, x, y);
         return _stickerWindows[s.Id];
@@ -307,11 +315,7 @@ public partial class App : System.Windows.Application
     public void CreateImportedSticker(string title, string plainBody, string bodyRtf, string bodyRuns,
         string pageId, string editTime, string editBy, bool pullDisabled)
     {
-        var screen = GetActiveScreen();
-        var wa = screen.WorkingArea;
-        int x = wa.Left + (wa.Width - 250) / 2;
-        int y = wa.Top + (wa.Height - 300) / 2;
-
+        var (screen, x, y) = CenterOnActiveScreen();
         var s = new Sticker
         {
             Title = title,
@@ -323,10 +327,8 @@ public partial class App : System.Windows.Application
             NotionLastEditBy = editBy,
             PullDisabled = pullDisabled,
             SyncState = "synced",
-            MonitorDeviceName = screen.DeviceName,
-            PositionX = x - wa.Left,
-            PositionY = y - wa.Top,
         };
+        PlaceOn(s, screen, x, y);
         StickerRepo!.Insert(s);
         OpenStickerWindow(s, x, y);
         _stickerWindows[s.Id].Activate();
@@ -417,7 +419,7 @@ public partial class App : System.Windows.Application
     public void ShowPomodoroHideNotice()
     {
         if (IsShuttingDown) return;
-        _trayIcon?.ShowBalloonTip(4000, "Noticker",
+        ShowBalloon(4000, "Noticker",
             "타이머는 백그라운드에서 계속 실행 중입니다", ToolTipIcon.None);
     }
 
@@ -499,11 +501,7 @@ public partial class App : System.Windows.Application
             : e.EndedMode == PomodoroMode.Focus
                 ? $"집중 끝 — {(e.NextMode == PomodoroMode.LongBreak ? "긴" : "짧은")} 휴식하세요"
                 : "휴식 끝 — 다시 집중할 시간";
-        try
-        {
-            _trayIcon?.ShowBalloonTip(5000, "Noticker — 포모도로", msg, ToolTipIcon.None);
-        }
-        catch (ObjectDisposedException) { }
+        ShowBalloon(5000, "Noticker — 포모도로", msg, ToolTipIcon.None);
     }
 
     public void OpenSettings()
@@ -550,12 +548,7 @@ public partial class App : System.Windows.Application
         {
             if (IsShuttingDown) return;
             var label = string.IsNullOrWhiteSpace(title) ? "(제목 없음)" : title;
-            try
-            {
-                _trayIcon?.ShowBalloonTip(5000, "Noticker — Notion 갱신",
-                    $"'{label}' 메모가 {message}", ToolTipIcon.Info);
-            }
-            catch (ObjectDisposedException) { }
+            ShowBalloon(5000, "Noticker — Notion 갱신", $"'{label}' 메모가 {message}", ToolTipIcon.Info);
         });
     }
 
@@ -606,11 +599,7 @@ public partial class App : System.Windows.Application
             var msg = alreadyPushed
                 ? $"'{label}' — push가 Notion 수정과 겹침, 스티커 버전이 반영됨"
                 : $"'{label}' — Notion에서 편집 중입니다. 동기화를 잠시 보류했어요";
-            try
-            {
-                _trayIcon?.ShowBalloonTip(6000, "Noticker — 동기화 충돌", msg, ToolTipIcon.Warning);
-            }
-            catch (ObjectDisposedException) { }
+            ShowBalloon(6000, "Noticker — 동기화 충돌", msg, ToolTipIcon.Warning);
             // 충돌 점/툴팁 즉시 반영 (백그라운드 전이는 UI 갱신 트리거가 없음)
             if (_stickerWindows.TryGetValue(stickerId, out var win))
                 win.RefreshSyncIndicator();
@@ -641,15 +630,18 @@ public partial class App : System.Windows.Application
         // Show tray balloon so the user sees exactly why sync failed
         Dispatcher.InvokeAsync(() =>
         {
-            _trayIcon?.ShowBalloonTip(
-                timeout: 6000,
-                tipTitle: "Noticker — Sync 실패",
-                tipText: message,
-                tipIcon: ToolTipIcon.Error);
+            ShowBalloon(6000, "Noticker — Sync 실패", message, ToolTipIcon.Error);
             // 실패 점/툴팁 즉시 반영 (백그라운드 전이는 UI 갱신 트리거가 없음)
             if (_stickerWindows.TryGetValue(stickerId, out var win))
                 win.RefreshSyncIndicator();
         });
+    }
+
+    // 트레이 풍선 공용 — 종료 중 dispose된 NotifyIcon 접근을 한 곳에서 방어
+    private void ShowBalloon(int timeoutMs, string title, string text, ToolTipIcon icon)
+    {
+        try { _trayIcon?.ShowBalloonTip(timeoutMs, title, text, icon); }
+        catch (ObjectDisposedException) { }
     }
 
     private void ExitApp()
