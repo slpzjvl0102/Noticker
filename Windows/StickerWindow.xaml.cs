@@ -32,7 +32,8 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     public event EventHandler? RealClosed;
 
     // pull의 dirty 가드용 — debounce 대기 중이면 pull이 이 스티커를 건너뜀
-    public bool IsSyncPending => _debounce.IsPending;
+    // 본문 저장 디바운스 대기도 dirty로 본다 — 미저장 편집을 pull이 덮어쓰지 않도록
+    public bool IsSyncPending => _debounce.IsPending || _contentSaveTimer?.IsEnabled == true;
 
     // 백그라운드 sync 전이(conflict 등) 후 App이 dispatcher에서 점/툴팁 갱신용으로 호출
     public void RefreshSyncIndicator() => UpdateSyncIndicator();
@@ -45,7 +46,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     {
         _sticker = sticker;
         _repo = repo;
-        _debounce = new DebouncedSyncService(queue);
+        _debounce = new DebouncedSyncService(queue, FlushPendingContentSave);
 
         InitializeComponent();
         DataContext = this;
@@ -58,7 +59,12 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
             new TextCompositionEventHandler(BodyBox_TextInputUpdate), true);
         BodyBox.AddHandler(TextCompositionManager.TextInputEvent,
             new TextCompositionEventHandler(BodyBox_TextInput), true);
-        BodyBox.LostKeyboardFocus += (_, _) => { _imeComposing = false; FlushPendingBodySave(); };
+        BodyBox.LostKeyboardFocus += (_, _) =>
+        {
+            _imeComposing = false;
+            FlushPendingBodySave();
+            FlushPendingContentSave();
+        };
 
         // Fix paragraph spacing via FlowDocument.Resources (more reliable than RichTextBox.Resources)
         var paraStyle = new Style(typeof(Paragraph));
@@ -360,6 +366,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         _loading = true;
         try
         {
+            _contentSaveTimer?.Stop();   // pull 내용이 정본 — 대기 중 로컬 직렬화는 폐기 (dirty 가드상 보통 비어 있음)
             _sticker.Title = title;
             NotifyTitle();
             _sticker.Body = plainBody;
@@ -540,6 +547,7 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
     protected override void OnClosing(CancelEventArgs e)
     {
         FlushPendingBodySave();
+        FlushPendingContentSave(force: true);   // 닫기/종료는 조합 중이어도 확정 — 유실 방지 우선
         FlushPendingPositionSave();
         if (App.Current.IsShuttingDown || _realClose)
         {
@@ -766,14 +774,42 @@ public partial class StickerWindow : Window, INotifyPropertyChanged
         UpdateCharCounter();
     }
 
+    // 편집 저장 — 상태(pending/UpdatedAt)와 점 색은 즉시, 비용이 큰 본문 직렬화(RTF·runs)와
+    // DB 쓰기는 300ms 디바운스로 묶는다. 연속 타이핑 중 키마다 전체 문서를 직렬화하지 않기 위함.
+    // 확정 시점: 타이머 만료, 본문 포커스 이탈, 창 닫기/숨김/종료, sync enqueue 직전(위 콜백).
+    private System.Windows.Threading.DispatcherTimer? _contentSaveTimer;
+
     private void SaveContent()
     {
-        SaveBodyContent();
         _sticker.UpdatedAt = DateTime.UtcNow.ToString("O");
         _sticker.SyncState = "pending";
+        UpdateSyncIndicator();
+
+        if (_contentSaveTimer is null)
+        {
+            _contentSaveTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _contentSaveTimer.Tick += (_, _) => FlushPendingContentSave();
+        }
+        _contentSaveTimer.Stop();
+        _contentSaveTimer.Start();
+    }
+
+    private void FlushPendingContentSave() => FlushPendingContentSave(force: false);
+
+    private void FlushPendingContentSave(bool force)
+    {
+        if (_contentSaveTimer is not { IsEnabled: true }) return;
+        _contentSaveTimer.Stop();
+        // IME 조합 중 직렬화는 조합을 깨뜨린다 (한글 복합 음절 손상) — 타이머를 재무장해 조합이
+        // 끝난 뒤 저장. 직전 commit까지의 내용은 이미 문서에 있으므로 다음 tick에 함께 반영된다
+        if (_imeComposing && !force) { _contentSaveTimer.Start(); return; }
+        SaveBodyContent();
         try { _repo.Update(_sticker); }
         catch { /* logged inside repo */ }
-        UpdateSyncIndicator();
+        UpdateSyncIndicator();   // 빈 메모 판정(IsEmptyUnsynced)은 Body 확정 후 값 기준
     }
 
     private void SavePosition()
